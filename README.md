@@ -1,3 +1,5 @@
+![](https://github.com/DavidSpickett/ExpressionCompiler/workflows/ExpressionCompiler/badge.svg)
+
 Simple parser/compiler for Lisp style expressions. For example:
 (+ (- 4 2) 3) => 5
 
