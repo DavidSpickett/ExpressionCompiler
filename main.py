@@ -227,6 +227,8 @@ def run_source(source):
     3
     >>> run_source("(sqrt (+ 2 2))")
     2.0
+    >>> run_source("(+ (sqrt (- 9 5)) (- 10 (+ (- 2 3) 2)))")
+    11.0
     """
     if not source:
         return
