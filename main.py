@@ -5,6 +5,9 @@ import operator
 from abc import ABC
 from functools import reduce
 
+class ParsingError(Exception):
+  pass
+
 class Call(ABC):
   def __init__(self, *args):
     self.args = args
@@ -39,7 +42,7 @@ class Call(ABC):
         arg = arg.execute()
       return self.apply(arg)
 
-    # First pass resolve all calls
+    # First pass resolves all calls
     new_args = []
     for arg in self.args:
       if isinstance(arg, Call):
@@ -81,19 +84,19 @@ def make_call(operator, args):
   """
   >>> make_call("ooo", [])
   Traceback (most recent call last):
-  RuntimeError: Call to unknown function "ooo".
+  ParsingError: Call to unknown function "ooo".
   >>> make_call("sqrt", [])
   Traceback (most recent call last):
-  RuntimeError: Expected 1 argument for function "sqrt", got 0.
+  ParsingError: Expected 1 argument for function "sqrt", got 0.
   >>> make_call("sqrt", [2, 3])
   Traceback (most recent call last):
-  RuntimeError: Expected 1 argument for function "sqrt", got 2.
+  ParsingError: Expected 1 argument for function "sqrt", got 2.
   >>> make_call("+", [])
   Traceback (most recent call last):
-  RuntimeError: Expected at least 2 arguments for function "+", got 0.
+  ParsingError: Expected at least 2 arguments for function "+", got 0.
   >>> make_call("-", [1])
   Traceback (most recent call last):
-  RuntimeError: Expected at least 2 arguments for function "-", got 1.
+  ParsingError: Expected at least 2 arguments for function "-", got 1.
   
   """
   calls = [
@@ -105,7 +108,7 @@ def make_call(operator, args):
 
   if isinstance(operator, Call):
     # Functions cannot return callables
-    raise RuntimeError("Expected function name, got a call to a function.")
+    raise ParsingError("Expected function name, got a call to a function.")
 
   for call_type in calls:
     if call_type.name == operator:
@@ -118,12 +121,12 @@ def make_call(operator, args):
 
     if (found_type.exact and len(args) != call_type.num_args) or \
        (not found_type.exact and len(args) < call_type.num_args):
-        raise RuntimeError("Expected {}{} argument{} for function \"{}\", got {}.".format(
+        raise ParsingError("Expected {}{} argument{} for function \"{}\", got {}.".format(
           insert, found_type.num_args, pluralise, call_type.name, len(args)))
 
     return call_type(*args)
   else:
-    raise RuntimeError("Call to unknown function \"{}\".".format(operator))
+    raise ParsingError("Call to unknown function \"{}\".".format(operator))
 
 def convert_arg(arg):
   """
@@ -163,10 +166,10 @@ def process_call(src, idx=0):
   -(+(1, -(1, 2)), 5)
   >>> process_call("((+ 1 2))")[0]
   Traceback (most recent call last):
-  RuntimeError: Expected function name, got a call to a function.
+  ParsingError: Expected function name, got a call to a function.
   """ 
   if src[idx] != "(":
-    raise RuntimeError("Call must begin with \"(\".")
+    raise ParsingError("Call must begin with \"(\".")
 
   idx += 1
   operator = None
