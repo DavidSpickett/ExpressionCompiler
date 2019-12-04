@@ -35,9 +35,6 @@ class Call(ABC):
         >>> Call.execute(PlusCall(SquareRootCall(16), MinusCall(12, 13)))
         3.0
         """
-        result = None
-        prev_arg = None
-
         if len(self.args) == 1:
             arg = self.args[0]
             if isinstance(arg, Call):
@@ -218,7 +215,8 @@ def process_call(src, idx=0):
                     args.append(convert_arg(symbol))
 
     if operator:
-        raise ParsingError("Unterminated call to function \"{}\"".format(operator))
+        raise ParsingError(
+            "Unterminated call to function \"{}\"".format(operator))
 
 
 def normalise(source):
