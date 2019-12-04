@@ -161,7 +161,7 @@ def get_symbol(src, idx):
     delimiters.extend(string.whitespace)
 
     symbol = ""
-    while src[idx] not in delimiters:
+    while idx < len(src) and src[idx] not in delimiters:
         symbol += src[idx]
         idx += 1
 
@@ -170,6 +170,15 @@ def get_symbol(src, idx):
 
 def process_call(src, idx=0):
     """
+    >>> process_call("+ 1 2)")
+    Traceback (most recent call last):
+    ParsingError: Call must begin with "(".
+    >>> process_call("(+ 1 2")
+    Traceback (most recent call last):
+    ParsingError: Unterminated call to function "+"
+    >>> process_call("(- (sqrt 2")
+    Traceback (most recent call last):
+    ParsingError: Unterminated call to function "sqrt"
     >>> process_call("(+ 1 2 3 4 5 6)")[0]
     +(1, 2, 3, 4, 5, 6)
     >>> process_call("(- (+ 1 (- 1 2)) 5)")[0]
@@ -207,6 +216,9 @@ def process_call(src, idx=0):
                     operator = symbol
                 else:
                     args.append(convert_arg(symbol))
+
+    if operator:
+        raise ParsingError("Unterminated call to function \"{}\"".format(operator))
 
 
 def normalise(source):
