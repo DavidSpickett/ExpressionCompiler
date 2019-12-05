@@ -4,6 +4,7 @@ import math
 import operator
 from abc import ABC
 from functools import reduce
+from copy import copy
 
 
 class ParsingError(Exception):
@@ -20,40 +21,70 @@ class Call(ABC):
           ", ".join(map(repr, self.args))
         )
 
-    def execute(self):
-        """
-        >>> Call.execute(PlusCall(1, 2))
-        3
-        >>> Call.execute(PlusCall(1, 2))
-        3
-        >>> Call.execute(PlusCall(1, 2, 3, 4))
-        10
-        >>> Call.execute(MinusCall(PlusCall(4, 3), 4))
-        3
-        >>> Call.execute(SquareRootCall(4))
-        2.0
-        >>> Call.execute(PlusCall(SquareRootCall(16), MinusCall(12, 13)))
-        3.0
-        """
-        if len(self.args) == 1:
-            arg = self.args[0]
-            if isinstance(arg, Call):
-                arg = arg.execute()
-            return self.apply(arg)
+    def prepare(self, scope, *args):
+        # Called before any calls are evaled. E.g. for a let expression
+        return scope
 
-        # First pass resolves all calls
-        new_args = []
+    def execute(self, scope):
+        """
+        >>> Call.execute(PlusCall(1, 2), {})
+        3
+        >>> Call.execute(PlusCall(1, 2), {})
+        3
+        >>> Call.execute(PlusCall(1, 2, 3, 4), {})
+        10
+        >>> Call.execute(MinusCall(PlusCall(4, 3), 4), {})
+        3
+        >>> Call.execute(SquareRootCall(4), {})
+        2.0
+        >>> Call.execute(PlusCall(SquareRootCall(16), MinusCall(12, 13)), {})
+        3.0
+        >>> Call.execute(PlusCall("foo", "bar"), {"foo":1, "bar":2})
+        3
+        >>> Call.execute(SquareRootCall("abc"), {})
+        Traceback (most recent call last):
+        ParsingError: Reference to unknown variable "abc".
+        >>> Call.execute(LetCall("foo", 2, PlusCall("foo", 5)), {})
+        Traceback (most recent call last):
+        ParsingError: Reference to unknown variable "foo".
+        >>> Call.execute(LetCall("'bar", 16, SquareRootCall("bar")), {})
+        4.0
+        """
+        # First resolve all symbols
+        sym_args = []
         for arg in self.args:
+            if isinstance(arg, str):
+                if arg.startswith("'"):
+                    # Don't evaluate this, just treat as string
+                    arg = arg[1:]
+                else:
+                    try:
+                        arg = int(arg)
+                    except ValueError:
+                        try:
+                            arg = scope[arg]
+                        except KeyError:
+                            msg = "Reference to unknown variable \"{}\"."
+                            raise ParsingError(msg.format(arg))
+
+            sym_args.append(arg)
+
+        # Then we prepare the scope, adding any new vars
+        scope = self.prepare(scope, *sym_args)
+
+        # Then resolve the calls using the updated scope
+        resolved_args = []
+        for arg in sym_args:
             if isinstance(arg, Call):
-                arg = arg.execute()
-            new_args.append(arg)
+                arg = arg.execute(scope)
+            resolved_args.append(arg)
 
         """
         Now all arguments are constants
         Remember that we validated the number of args
         when we built the Call objects.
         """
-        return self.apply(*new_args)
+        return self.apply(scope, *resolved_args)
 
 
 class PlusCall(Call):
@@ -61,7 +92,7 @@ class PlusCall(Call):
     num_args = 2
     name = "+"
 
-    def apply(self, *args):
+    def apply(self, scope, *args):
         return sum(args)
 
 
@@ -70,7 +101,7 @@ class MinusCall(Call):
     num_args = 2
     name = "-"
 
-    def apply(self, *args):
+    def apply(self, scope, *args):
         return reduce(operator.sub, args)
 
 
@@ -79,8 +110,29 @@ class SquareRootCall(Call):
     num_args = 1
     name = "sqrt"
 
-    def apply(self, a):
+    def apply(self, scope, a):
         return math.sqrt(a)
+
+
+class LetCall(Call):
+    exact = True
+    num_args = 3
+    name = "let"
+
+    def prepare(self, scope, name, value, body):
+        # This is called before we evaluate the body
+        # Inner scope, don't modify outer
+        # E.g. (let 'x 1 (let 'y 2 (+ 1 y)) (+ x y))
+        # Should be an error, y is only in the inner scope
+        scope = copy(scope)
+        if isinstance(value, Call):
+            value = value.execute(scope)
+        scope[name] = value
+        return scope
+
+    def apply(self, scope, name, value, body):
+        # The body has already been evaluated by this point
+        return body
 
 
 def make_call(operator, args):
@@ -105,6 +157,7 @@ def make_call(operator, args):
         PlusCall,
         MinusCall,
         SquareRootCall,
+        LetCall,
     ]
     found_type = None
 
@@ -121,36 +174,16 @@ def make_call(operator, args):
         insert = "" if found_type.exact else "at least "
         pluralise = "s" if found_type.num_args != 1 else ""
 
-        if (found_type.exact and len(args) != call_type.num_args) or \
-           (not found_type.exact and len(args) < call_type.num_args):
+        if (found_type.exact and len(args) != found_type.num_args) or \
+           (not found_type.exact and len(args) < found_type.num_args):
             err = "Expected {}{} argument{} for function \"{}\", got {}."
             raise ParsingError(err.format(
                                 insert, found_type.num_args,
-                                pluralise, call_type.name, len(args)))
+                                pluralise, found_type.name, len(args)))
 
         return call_type(*args)
     else:
         raise ParsingError("Call to unknown function \"{}\".".format(operator))
-
-
-def convert_arg(arg):
-    """
-    >>> convert_arg(PlusCall())
-    +()
-    >>> convert_arg("1")
-    1
-    >>> convert_arg("foo")
-    Traceback (most recent call last):
-    ValueError: Non integer arguments not supported.
-    """
-    # Convert from strings in the source into Python types
-    if isinstance(arg, Call):
-        return arg
-
-    try:
-        return int(arg)
-    except ValueError:
-        raise ValueError("Non integer arguments not supported.")
 
 
 def get_symbol(src, idx):
@@ -177,9 +210,9 @@ def process_call(src, idx=0):
     Traceback (most recent call last):
     ParsingError: Unterminated call to function "sqrt"
     >>> process_call("(+ 1 2 3 4 5 6)")[0]
-    +(1, 2, 3, 4, 5, 6)
+    +('1', '2', '3', '4', '5', '6')
     >>> process_call("(- (+ 1 (- 1 2)) 5)")[0]
-    -(+(1, -(1, 2)), 5)
+    -(+('1', -('1', '2')), '5')
     >>> process_call("((+ 1 2))")[0]
     Traceback (most recent call last):
     ParsingError: Expected function name, got a call to a function.
@@ -212,7 +245,7 @@ def process_call(src, idx=0):
                 if operator is None:
                     operator = symbol
                 else:
-                    args.append(convert_arg(symbol))
+                    args.append(symbol)
 
     if operator:
         raise ParsingError(
@@ -239,6 +272,13 @@ def run_source(source):
     2.0
     >>> run_source("(+ (sqrt (- 9 5)) (- 10 (+ (- 2 3) 2)))")
     11.0
+    >>> run_source("(let 'a 1 (+ a 1) )")
+    2
+    >>> run_source("(let 'x (let 'y 1 (+ y 0)) (+ x y))")
+    Traceback (most recent call last):
+    ParsingError: Reference to unknown variable "y".
+    >>> run_source("(let 'x 1 (let 'y 2 (+ x y)))")
+    3
     """
     if not source:
         return
@@ -246,7 +286,7 @@ def run_source(source):
     source = normalise(source)
     prog, _ = process_call(source)
     if prog:
-        return prog.execute()
+        return prog.execute({})
 
 
 if __name__ == "__main__":
