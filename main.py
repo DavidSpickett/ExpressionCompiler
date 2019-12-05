@@ -221,35 +221,27 @@ def process_call(src, idx=0):
         raise ParsingError("Call must begin with \"(\".")
 
     idx += 1
-    operator = None
-    args = []
+    parts = []
 
     while idx < len(src):
         if src[idx] == "(":
             call, idx = process_call(src, idx)
-            if operator is None:
-                operator = call
-            else:
-                args.append(call)
+            parts.append(call)
         elif src[idx] == ")":
             assert operator is not None
             # Note the +1 here to consume the closing bracket
-            return make_call(operator, args), idx+1
+            return make_call(parts[0], parts[1:]), idx+1
         elif src[idx] in string.whitespace:
             # Whitespace around () will have been removed but
             # it is still in between arguments
             idx += 1
         else:
             symbol, idx = get_symbol(src, idx)
-            if symbol:
-                if operator is None:
-                    operator = symbol
-                else:
-                    args.append(symbol)
+            parts.append(symbol)
 
-    if operator:
+    if parts:
         raise ParsingError(
-            "Unterminated call to function \"{}\"".format(operator))
+            "Unterminated call to function \"{}\"".format(parts[0]))
 
 
 def normalise(source):
