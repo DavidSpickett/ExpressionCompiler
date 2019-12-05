@@ -44,9 +44,11 @@ class Call(ABC):
         >>> Call.execute(SquareRootCall("abc"), {})
         Traceback (most recent call last):
         ParsingError: Reference to unknown variable "abc".
+        >>> # Note that this var name is *not* escaped
         >>> Call.execute(LetCall("foo", 2, PlusCall("foo", 5)), {})
         Traceback (most recent call last):
         ParsingError: Reference to unknown variable "foo".
+        >>> # Whereas this one is
         >>> Call.execute(LetCall("'bar", 16, SquareRootCall("bar")), {})
         4.0
         """
