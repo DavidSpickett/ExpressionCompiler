@@ -43,7 +43,7 @@ class Call(ABC):
 
     def prepare(self, scope, *args):
         # Called before any calls are evaled. E.g. for a let expression
-        return scope
+        return args, scope
 
     def execute(self, scope):
         """
@@ -92,7 +92,8 @@ class Call(ABC):
             sym_args.append(arg)
 
         # Then we prepare the scope, adding any new vars
-        scope = self.prepare(scope, *sym_args)
+        # Things like "if" may modify it's args
+        sym_args, scope = self.prepare(scope, *sym_args)
 
         # Then resolve the calls using the updated scope
         resolved_args = []
@@ -107,6 +108,24 @@ class Call(ABC):
         when we built the Call objects.
         """
         return self.apply(scope, *resolved_args)
+
+
+class IfCall(Call):
+    exact = True
+    num_args = 3
+    name = "if"
+
+    def prepare(self, scope, *args):
+        condition = args[0]
+        if isinstance(condition, Call):
+            condition = condition.execute(scope)
+        # Choose the "then" or the "else"
+        args = (args[1],) if condition else (args[2],)
+        return args, scope
+
+    def apply(self, scope, *args):
+        # The body has already been evaluated by this point
+        return args[-1]
 
 
 class PlusCall(Call):
@@ -154,7 +173,7 @@ class LetCall(Call):
             if isinstance(v, Call):
                 v = v.execute(scope)
             scope[k] = v
-        return scope
+        return args, scope
 
     def validate_args(self):
         num_args = len(self.args)
@@ -199,6 +218,7 @@ Expected (let <name> <value> ... (body))
         MinusCall,
         SquareRootCall,
         LetCall,
+        IfCall,
     ]
     if isinstance(operator, Call):
         # Functions cannot return callables
@@ -302,6 +322,12 @@ def run_source(source):
     3
     >>> run_source("(+ (+ 1) (- 1))")
     0
+    >>> run_source("(if 0 (+ 1) (- 1))")
+    -1
+    >>> run_source("(if 1 (+ 1) (- 1))")
+    1
+    >>> run_source("(if (- 2 2) (+ 1) (- 1))")
+    -1
     """
     if not source:
         return
