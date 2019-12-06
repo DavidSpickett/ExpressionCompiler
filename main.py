@@ -5,6 +5,13 @@ import operator
 from abc import ABC
 from functools import reduce
 from copy import copy
+from itertools import tee
+
+def pairwise(iterable):
+    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
+    a, b = tee(iterable)
+    next(b, None)
+    return zip(a, b)
 
 
 class ParsingError(Exception):
@@ -14,12 +21,24 @@ class ParsingError(Exception):
 class Call(ABC):
     def __init__(self, *args):
         self.args = args
+        self.validate_args()
 
     def __repr__(self):
         return "{}({})".format(
           self.name,
           ", ".join(map(repr, self.args))
         )
+
+    def validate_args(self):
+        insert = "" if self.exact else "at least "
+        pluralise = "s" if self.num_args != 1 else ""
+
+        if (self.exact and len(self.args) != self.num_args) or \
+           (not self.exact and len(self.args) < self.num_args):
+            err = "Expected {}{} argument{} for function \"{}\", got {}."
+            raise ParsingError(err.format(
+                                insert, self.num_args,
+                                pluralise, self.name, len(self.args)))
 
     def prepare(self, scope, *args):
         # Called before any calls are evaled. E.g. for a let expression
@@ -121,20 +140,31 @@ class LetCall(Call):
     num_args = 3
     name = "let"
 
-    def prepare(self, scope, name, value, body):
+    def prepare(self, scope, *args):
         # This is called before we evaluate the body
         # Inner scope, don't modify outer
         # E.g. (let 'x 1 (let 'y 2 (+ 1 y)) (+ x y))
         # Should be an error, y is only in the inner scope
         scope = copy(scope)
-        if isinstance(value, Call):
-            value = value.execute(scope)
-        scope[name] = value
+
+        for k,v in pairwise(args[:-1]):
+            if isinstance(v, Call):
+                v = v.execute(scope)
+            scope[k] = v
         return scope
 
-    def apply(self, scope, name, value, body):
+    def validate_args(self):
+        num_args = len(self.args)
+        expect = "(let <name> <value> ... (body))"
+        if num_args < 3:
+            raise ParsingError("Too few arguments for let. Expected {}".format(expect))
+        elif not num_args % 2:
+            raise ParsingError("Wrong number arguments for let. Expected {}".format(expect))
+
+
+    def apply(self, scope, *args):
         # The body has already been evaluated by this point
-        return body
+        return args[-1]
 
 
 def make_call(operator, args):
@@ -154,6 +184,12 @@ def make_call(operator, args):
     >>> make_call("-", [1])
     Traceback (most recent call last):
     ParsingError: Expected at least 2 arguments for function "-", got 1.
+    >>> make_call("let", [1, 2])
+    Traceback (most recent call last):
+    ParsingError: Too few arguments for let. Expected (let <name> <value> ... (body))
+    >>> make_call("let", [1, 2, 3, 4])
+    Traceback (most recent call last):
+    ParsingError: Wrong number arguments for let. Expected (let <name> <value> ... (body))
     """
     calls = [
         PlusCall,
@@ -161,32 +197,17 @@ def make_call(operator, args):
         SquareRootCall,
         LetCall,
     ]
-    found_type = None
-
     if isinstance(operator, Call):
         # Functions cannot return callables
         raise ParsingError("Expected function name, got a call to a function.")
 
     for call_type in calls:
         if call_type.name == operator:
-            found_type = call_type
             break
-
-    if found_type:
-        insert = "" if found_type.exact else "at least "
-        pluralise = "s" if found_type.num_args != 1 else ""
-
-        if (found_type.exact and len(args) != found_type.num_args) or \
-           (not found_type.exact and len(args) < found_type.num_args):
-            err = "Expected {}{} argument{} for function \"{}\", got {}."
-            raise ParsingError(err.format(
-                                insert, found_type.num_args,
-                                pluralise, found_type.name, len(args)))
-
-        return call_type(*args)
     else:
         raise ParsingError("Call to unknown function \"{}\".".format(operator))
 
+    return call_type(*args)
 
 def get_symbol(src, idx):
     delimiters = ["(", ")"]
@@ -230,7 +251,6 @@ def process_call(src, idx=0):
             call, idx = process_call(src, idx)
             parts.append(call)
         elif src[idx] == ")":
-            assert operator is not None
             # Note the +1 here to consume the closing bracket
             return make_call(parts[0], parts[1:]), idx+1
         elif src[idx] in string.whitespace:
@@ -272,6 +292,9 @@ def run_source(source):
     Traceback (most recent call last):
     ParsingError: Reference to unknown variable "y".
     >>> run_source("(let 'x 1 (let 'y 2 (+ x y)))")
+    3
+    >>> # Declare multiple variables in one let
+    >>> run_source("(let 'x 1 'y 2 (+ x y))")
     3
     """
     if not source:
