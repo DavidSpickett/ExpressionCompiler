@@ -134,7 +134,7 @@ class PlusCall(Call):
     name = "+"
 
     def apply(self, scope, *args):
-        return sum(args)
+        return reduce(operator.add, args)
 
 
 class MinusCall(Call):
@@ -155,6 +155,15 @@ class SquareRootCall(Call):
 
     def apply(self, scope, a):
         return math.sqrt(a)
+
+
+class PrintCall(Call):
+    exact = False
+    num_args = 1
+    name = "print"
+
+    def apply(self, scope, *args):
+        print(*args)
 
 
 class LetCall(Call):
@@ -219,6 +228,7 @@ Expected (let <name> <value> ... (body))
         SquareRootCall,
         LetCall,
         IfCall,
+        PrintCall,
     ]
     if isinstance(operator, Call):
         # Functions cannot return callables
@@ -234,33 +244,42 @@ Expected (let <name> <value> ... (body))
 
 
 def get_symbol(src, idx):
-    delimiters = ["(", ")"]
-    delimiters.extend(string.whitespace)
+    is_string = src[idx] == "\""
+    if is_string:
+        delimiters = ["\""]
+        idx += 1
+    else:
+        delimiters = ["(", ")"]
+        delimiters.extend(string.whitespace)
 
     symbol = ""
     while idx < len(src) and src[idx] not in delimiters:
         symbol += src[idx]
         idx += 1
 
+    if is_string:
+        idx += 1
+        symbol = "'" + symbol
+
     return symbol, idx
 
 
-def process_call(src, idx=0):
+def process_call(src, idx):
     """
-    >>> process_call("+ 1 2)")
+    >>> process_call("+ 1 2)", 0)
     Traceback (most recent call last):
     ParsingError: Call must begin with "(".
-    >>> process_call("(+ 1 2")
+    >>> process_call("(+ 1 2", 0)
     Traceback (most recent call last):
     ParsingError: Unterminated call to function "+"
-    >>> process_call("(- (sqrt 2")
+    >>> process_call("(- (sqrt 2", 0)
     Traceback (most recent call last):
     ParsingError: Unterminated call to function "sqrt"
-    >>> process_call("(+ 1 2 3 4 5 6)")[0]
+    >>> process_call("(+ 1 2 3 4 5 6)", 0)[0]
     +('1', '2', '3', '4', '5', '6')
-    >>> process_call("(- (+ 1 (- 1 2)) 5)")[0]
+    >>> process_call("(- (+ 1 (- 1 2)) 5)", 0)[0]
     -(+('1', -('1', '2')), '5')
-    >>> process_call("((+ 1 2))")[0]
+    >>> process_call("((+ 1 2))", 0)[0]
     Traceback (most recent call last):
     ParsingError: Expected function name, got a call to a function.
     """
@@ -328,14 +347,30 @@ def run_source(source):
     1
     >>> run_source("(if (- 2 2) (+ 1) (- 1))")
     -1
+    >>> run_source("(+ 'b 'c)")
+    'bc'
+    >>> # Multiple blocks
+    >>> run_source("(print \\"The result is:\\")(+ 1 2)")
+    The result is:
+    3
+    >>> run_source("(let 'foo 1 'bar \\"cat\\" (print foo bar))")
+    1 cat
     """
     if not source:
         return
 
     source = normalise(source)
-    prog, _ = process_call(source)
-    if prog:
-        return prog.execute({})
+    bodies = []
+    idx = 0
+
+    while idx < len(source):
+        body, idx = process_call(source, idx)
+        if body:
+            bodies.append(body)
+
+    for body in bodies[:-1]:
+        body.execute({})
+    return bodies[-1].execute({})
 
 
 if __name__ == "__main__":
