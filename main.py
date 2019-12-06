@@ -7,6 +7,7 @@ from functools import reduce
 from copy import copy
 from itertools import tee
 
+
 def pairwise(iterable):
     "s -> (s0,s1), (s1,s2), (s2, s3), ..."
     a, b = tee(iterable)
@@ -110,7 +111,7 @@ class Call(ABC):
 
 class PlusCall(Call):
     exact = False
-    num_args = 2
+    num_args = 1
     name = "+"
 
     def apply(self, scope, *args):
@@ -119,10 +120,12 @@ class PlusCall(Call):
 
 class MinusCall(Call):
     exact = False
-    num_args = 2
+    num_args = 1
     name = "-"
 
     def apply(self, scope, *args):
+        if len(args) == 1:
+            return -args[0]
         return reduce(operator.sub, args)
 
 
@@ -147,7 +150,7 @@ class LetCall(Call):
         # Should be an error, y is only in the inner scope
         scope = copy(scope)
 
-        for k,v in pairwise(args[:-1]):
+        for k, v in pairwise(args[:-1]):
             if isinstance(v, Call):
                 v = v.execute(scope)
             scope[k] = v
@@ -157,10 +160,11 @@ class LetCall(Call):
         num_args = len(self.args)
         expect = "(let <name> <value> ... (body))"
         if num_args < 3:
-            raise ParsingError("Too few arguments for let. Expected {}".format(expect))
+            raise ParsingError(
+                "Too few arguments for let. Expected {}".format(expect))
         elif not num_args % 2:
-            raise ParsingError("Wrong number arguments for let. Expected {}".format(expect))
-
+            raise ParsingError(
+                "Wrong number arguments for let. Expected {}".format(expect))
 
     def apply(self, scope, *args):
         # The body has already been evaluated by this point
@@ -180,16 +184,15 @@ def make_call(operator, args):
     ParsingError: Expected 1 argument for function "sqrt", got 2.
     >>> make_call("+", [])
     Traceback (most recent call last):
-    ParsingError: Expected at least 2 arguments for function "+", got 0.
-    >>> make_call("-", [1])
-    Traceback (most recent call last):
-    ParsingError: Expected at least 2 arguments for function "-", got 1.
+    ParsingError: Expected at least 1 argument for function "+", got 0.
     >>> make_call("let", [1, 2])
     Traceback (most recent call last):
-    ParsingError: Too few arguments for let. Expected (let <name> <value> ... (body))
+    ParsingError: Too few arguments for let. \
+Expected (let <name> <value> ... (body))
     >>> make_call("let", [1, 2, 3, 4])
     Traceback (most recent call last):
-    ParsingError: Wrong number arguments for let. Expected (let <name> <value> ... (body))
+    ParsingError: Wrong number arguments for let. \
+Expected (let <name> <value> ... (body))
     """
     calls = [
         PlusCall,
@@ -208,6 +211,7 @@ def make_call(operator, args):
         raise ParsingError("Call to unknown function \"{}\".".format(operator))
 
     return call_type(*args)
+
 
 def get_symbol(src, idx):
     delimiters = ["(", ")"]
@@ -296,6 +300,8 @@ def run_source(source):
     >>> # Declare multiple variables in one let
     >>> run_source("(let 'x 1 'y 2 (+ x y))")
     3
+    >>> run_source("(+ (+ 1) (- 1))")
+    0
     """
     if not source:
         return
