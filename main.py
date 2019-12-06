@@ -71,6 +71,10 @@ class Call(ABC):
         >>> # Whereas this one is
         >>> Call.execute(LetCall("'bar", 16, SquareRootCall("bar")), {})
         4.0
+        >>> Call.execute(EqualCall(1, 2), {})
+        False
+        >>> Call.execute(EqualCall(1, 1, 1, 1), {})
+        True
         """
         # First resolve all symbols
         sym_args = []
@@ -108,6 +112,15 @@ class Call(ABC):
         when we built the Call objects.
         """
         return self.apply(scope, *resolved_args)
+
+
+class EqualCall(Call):
+    exact = False
+    num_args = 2
+    name = "eq"
+
+    def apply(self, scope, *args):
+        return len(set(args)) == 1
 
 
 class IfCall(Call):
@@ -221,6 +234,9 @@ Expected (let <name> <value> ... (body))
     Traceback (most recent call last):
     ParsingError: Wrong number arguments for let. \
 Expected (let <name> <value> ... (body))
+    >>> make_call("eq", [1])
+    Traceback (most recent call last):
+    ParsingError: Expected at least 2 arguments for function "eq", got 1.
     """
     calls = [
         PlusCall,
@@ -229,6 +245,7 @@ Expected (let <name> <value> ... (body))
         LetCall,
         IfCall,
         PrintCall,
+        EqualCall,
     ]
     if isinstance(operator, Call):
         # Functions cannot return callables
@@ -355,6 +372,14 @@ def run_source(source):
     3
     >>> run_source("(let 'foo 1 'bar \\"cat\\" (print foo bar))")
     1 cat
+    >>> run_source(
+    ...  "(let 'x 1 'y 1 'z 1\\
+    ...     (if (eq x y z)\\
+    ...       (print \\"hello\\")\\
+    ...       (print \\"goodbye\\")\\
+    ...     )\\
+    ...   )")
+    hello
     """
     if not source:
         return
