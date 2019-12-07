@@ -518,6 +518,23 @@ def run_source(source):
     ...  (bar 2)")
     Traceback (most recent call last):
     ParsingError: Call to unknown function "bar".
+    >>> # We can define a function with a different body
+    >>> run_source(
+    ... "(if (+ 0)\\
+    ...     (defun 'x (+ 2))\\
+    ...     (defun 'x (+ 3))\\
+    ...  )\\
+    ...  (x)")
+    3
+    >>> # Value of x at time of defun is irrelevant
+    >>> run_source(
+    ... "(let 'x 99\\
+    ...     (defun 'y 'a (+ a x))\\
+    ...  )\\
+    ...  (let 'x 1\\
+    ...     (y 10)\\
+    ...  )")
+    11
     >>> run_source("(% 5 3)")
     2
     """
