@@ -26,3 +26,4 @@ jobs:
     - name: Test
       run: |
         python main.py --test
+        python run_examples.py
