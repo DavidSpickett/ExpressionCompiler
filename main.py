@@ -2,6 +2,7 @@ import string
 import re
 import math
 import operator
+import argparse
 from abc import ABC
 from functools import reduce
 from copy import copy
@@ -572,5 +573,15 @@ def run_source(source):
 
 
 if __name__ == "__main__":
-    import doctest
-    doctest.testmod()
+    parser = argparse.ArgumentParser(description='LispALike interpreter')
+    parser.add_argument('--test', default=False,
+        action='store_true', help='Run tests.')
+    parser.add_argument('filename', nargs='?', help="File to interpret.")
+    args = parser.parse_args()
+
+    if args.test:
+        import doctest
+        doctest.testmod()
+    else:
+        with open(args.filename) as f:
+            print(run_source(f.read()))
