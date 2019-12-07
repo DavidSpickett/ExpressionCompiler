@@ -145,6 +145,14 @@ class IfCall(Call):
         return args[-1]
 
 
+class ModulusCall(Call):
+    exact = True
+    num_args = 2
+    name = "%"
+
+    def apply(self, scope, global_scope, a, b):
+        return a % b
+
 class PlusCall(Call):
     exact = False
     num_args = 1
@@ -285,6 +293,7 @@ Expected (let <name> <value> ... (body))
         IfCall,
         PrintCall,
         EqualCall,
+        ModulusCall,
     ]
     if isinstance(operator, Call):
         # Functions cannot return callables
@@ -467,6 +476,8 @@ def run_source(source):
     ...  )\\
     ...  (foo 1)\\
     ...  (bar 2)")
+    2
+    >>> run_source("(% 5 3)")
     2
     """
     if not source:
