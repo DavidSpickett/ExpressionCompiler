@@ -537,6 +537,11 @@ def run_source(source):
     11
     >>> run_source("(% 5 3)")
     2
+    >>> # fn returning a string can be used as a name
+    >>> run_source(
+    ...     "(defun (+ \\"f\\") (print \\"Hello\\"))\\
+    ...      (f)")
+    Hello
     """
     if not source:
         return
