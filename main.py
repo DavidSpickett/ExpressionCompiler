@@ -447,6 +447,18 @@ def run_source(source):
     ...   (defun 'A 'x (+ (B x) 1))\\
     ...   (A 24)")
     35
+    >>> #No return value from program should be fine
+    >>> run_source("(defun 'x (+ 1))")
+    >>> # Can have no arguments
+    >>> run_source("(defun 'x (+ 4)) (sqrt (x))")
+    2.0
+    >>> # Usual argument validaton takes place
+    >>> run_source("(defun 'x 'y (+ y))(x 2 3)")
+    Traceback (most recent call last):
+    ParsingError: Expected 1 argument for function "x", got 2.
+    >>> run_source("(defun 'x 'y (+ y)) (x))")
+    Traceback (most recent call last):
+    ParsingError: Expected 1 argument for function "x", got 0.
     >>> #TODO: this should not define "bar"
     >>> run_source(
     ... "(if (+ 1)\\
@@ -473,7 +485,8 @@ def run_source(source):
 
     for body in bodies[:-1]:
         body.execute({}, global_scope)
-    return bodies[-1].execute({}, global_scope)
+    if bodies:
+        return bodies[-1].execute({}, global_scope)
 
 
 if __name__ == "__main__":
