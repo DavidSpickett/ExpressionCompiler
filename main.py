@@ -441,9 +441,19 @@ def normalise(source):
     '(foo)'
     >>> normalise("(    foo (bar 1  2 ))")
     '(foo(bar 1 2))'
+    >>> normalise("# food")
+    ''
+    >>> normalise("(+ 2 1) #foo")
+    '(+ 2 1)'
+    >>> normalise("(+ 1 2) #thing\\n(+ 3 4)")
+    '(+ 1 2)(+ 3 4)'
     """
+    # <space><bracket><space> => <bracket>
     return re.sub(r"\s*([\(\)])\s*", r"\g<1>",
-                  re.sub(r"\s+", " ", source))
+                  # <space> n times => <space>
+                  re.sub(r"\s+", " ",
+                  # remove comments
+                  re.sub(r"#.*(\n)?", "", source)))
 
 
 def run_source(source):
@@ -549,6 +559,14 @@ def run_source(source):
     ...   )\\
     ...   (negate 1)")
     -1
+    >>> run_source(
+    ... "# This is a comment\\n\\
+    ...  # (+ 1 2)\\n\\
+    ...  (print (+ 1 2))\\n\\
+    ...  # Or after\\n\\
+    ... (print \\"No hashes in strings. *sadface*\\")")
+    3
+    No hashes in strings. *sadface*
     """
     if not source:
         return
@@ -563,7 +581,6 @@ def run_source(source):
         body, idx, global_scope = process_call(source, idx, global_scope)
         if body:
             # Execute as we go so that new functions are defined
-
             # Each new block will have a new scope
             # The global scope will be updated during blocks
             result = body.execute({}, global_scope)
@@ -575,13 +592,15 @@ def run_source(source):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='LispALike interpreter')
     parser.add_argument('--test', default=False,
-        action='store_true', help='Run tests.')
-    parser.add_argument('filename', nargs='?', help="File to interpret.")
+        action='store_true', help='Run tests. (default False)')
+    parser.add_argument('filename', nargs='?', help="File to interpret. (optional)")
     args = parser.parse_args()
 
     if args.test:
         import doctest
         doctest.testmod()
     else:
+        if args.filename is None:
+            raise RuntimeError("Filename is required if not running tests.")
         with open(args.filename) as f:
             print(run_source(f.read()))
