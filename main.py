@@ -542,6 +542,12 @@ def run_source(source):
     ...     "(defun (+ \\"f\\") (print \\"Hello\\"))\\
     ...      (f)")
     Hello
+    >>> run_source(
+    ...  "(let 'n \\"negate\\"\\
+    ...        (defun n 'n (- n))\\
+    ...   )\\
+    ...   (negate 1)")
+    -1
     """
     if not source:
         return
