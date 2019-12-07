@@ -452,8 +452,8 @@ def normalise(source):
     return re.sub(r"\s*([\(\)])\s*", r"\g<1>",
                   # <space> n times => <space>
                   re.sub(r"\s+", " ",
-                  # remove comments
-                  re.sub(r"#.*(\n)?", "", source)))
+                         # remove comments
+                         re.sub(r"#.*(\n)?", "", source)))
 
 
 def run_source(source):
@@ -592,8 +592,10 @@ def run_source(source):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='LispALike interpreter')
     parser.add_argument('--test', default=False,
-        action='store_true', help='Run tests. (default False)')
-    parser.add_argument('filename', nargs='?', help="File to interpret. (optional)")
+                        action='store_true',
+                        help='Run tests. (default False)')
+    parser.add_argument('filename', nargs='?',
+                        help="File to interpret. (optional)")
     args = parser.parse_args()
 
     if args.test:
