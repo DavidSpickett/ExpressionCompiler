@@ -79,6 +79,9 @@ class Call(ABC):
         False
         >>> Call.execute(EqualCall(1, 1, 1, 1), {}, {})
         True
+        >>> # Show that the body is not evaluated
+        >>> Call.execute(
+        ...     DefineFunctionCall("'x", "'y", PlusCall("x", "y")), {}, {})
         """
         # First resolve all symbols
         sym_args = []
@@ -152,6 +155,7 @@ class ModulusCall(Call):
 
     def apply(self, scope, global_scope, a, b):
         return a % b
+
 
 class PlusCall(Call):
     exact = False
@@ -259,6 +263,54 @@ def make_user_function(name, *args):
     )
 
 
+class DefineFunctionCall(Call):
+    exact = False
+    num_args = 2
+    name = "defun"
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.body = None
+
+    def prepare(self, scope, global_scope, *args):
+        """
+        We need to prevent the body of the function
+        being evaluated until it's actually called.
+        We could just add the function to global scope here,
+        but then defuns that aren't executed would still
+        define a function. if c def a else def b etc.
+        So just remove the body from the args and stash
+        it in the defun call until it actually gets
+        executed.
+        """
+        self.body = args[-1]
+        return args[:-1], scope
+
+    def apply(self, scope, global_scope, *args):
+        # Add a new Call type to global scope
+        # Remember that the body of the function
+        # was stashed in self in prepare.
+
+        # Note the name and args have the ' removed by now
+        name = args[0]
+        args = args[1:]
+
+        global_scope[name] = type(
+            "UserCall{}".format(name),
+            (BaseUserCall,),
+            {
+                "exact": True,
+                "name": name,
+                "num_args": len(args),
+                "arg_names": args,
+                # The code to be run (which is a Call by now)
+                "body": self.body,
+            }
+        )
+
+        # We don't return anything here, just add a fn to global scope
+
+
 def make_call(operator, args, global_scope):
     """
     >>> make_call("ooo", [], {})
@@ -294,6 +346,7 @@ Expected (let <name> <value> ... (body))
         PrintCall,
         EqualCall,
         ModulusCall,
+        DefineFunctionCall,
     ]
     if isinstance(operator, Call):
         # Functions cannot return callables
@@ -308,20 +361,7 @@ Expected (let <name> <value> ... (body))
             if call_type.name == operator:
                 break
         else:
-            # Maybe we're defining a user function
-            if operator == "defun":
-                # Add a new Call type to global scope
-                # 1: to remove the ' escape
-                unescaped_args = [a[1:] for a in args[:-1]]
-                # Obviously leave the body as it is
-                unescaped_args.append(args[-1])
-                new_func_type = make_user_function(*unescaped_args)
-                global_scope[unescaped_args[0]] = new_func_type
-
-                # Defining a new function doesn't return anything
-                return
-            else:
-                raise ParsingError(
+            raise ParsingError(
                     "Call to unknown function \"{}\".".format(operator))
 
         return call_type(*args)
@@ -468,7 +508,7 @@ def run_source(source):
     >>> run_source("(defun 'x 'y (+ y)) (x))")
     Traceback (most recent call last):
     ParsingError: Expected 1 argument for function "x", got 0.
-    >>> #TODO: this should not define "bar"
+    >>> # This does not define "bar"
     >>> run_source(
     ... "(if (+ 1)\\
     ...     (defun 'foo 'x (+ x))\\
@@ -476,7 +516,8 @@ def run_source(source):
     ...  )\\
     ...  (foo 1)\\
     ...  (bar 2)")
-    2
+    Traceback (most recent call last):
+    ParsingError: Call to unknown function "bar".
     >>> run_source("(% 5 3)")
     2
     """
@@ -484,20 +525,22 @@ def run_source(source):
         return
 
     source = normalise(source)
-    bodies = []
     idx = 0
     # Where user functions are added to
     global_scope = {}
 
+    result = None
     while idx < len(source):
         body, idx, global_scope = process_call(source, idx, global_scope)
         if body:
-            bodies.append(body)
+            # Execute as we go so that new functions are defined
 
-    for body in bodies[:-1]:
-        body.execute({}, global_scope)
-    if bodies:
-        return bodies[-1].execute({}, global_scope)
+            # Each new block will have a new scope
+            # The global scope will be updated during blocks
+            result = body.execute({}, global_scope)
+
+    # program's return value is the return of the last block
+    return result
 
 
 if __name__ == "__main__":
