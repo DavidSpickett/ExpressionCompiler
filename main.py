@@ -41,39 +41,43 @@ class Call(ABC):
                                 insert, self.num_args,
                                 pluralise, self.name, len(self.args)))
 
-    def prepare(self, scope, *args):
+    def prepare(self, scope, global_scope, *args):
         # Called before any calls are evaled. E.g. for a let expression
         return args, scope
 
-    def execute(self, scope):
+    def execute(self, scope, global_scope):
         """
-        >>> Call.execute(PlusCall(1, 2), {})
+        >>> Call.execute(PlusCall(1, 2), {}, {})
         3
-        >>> Call.execute(PlusCall(1, 2), {})
+        >>> Call.execute(PlusCall(1, 2), {}, {})
         3
-        >>> Call.execute(PlusCall(1, 2, 3, 4), {})
+        >>> Call.execute(PlusCall(1, 2, 3, 4), {}, {})
         10
-        >>> Call.execute(MinusCall(PlusCall(4, 3), 4), {})
+        >>> Call.execute(MinusCall(PlusCall(4, 3), 4), {}, {})
         3
-        >>> Call.execute(SquareRootCall(4), {})
+        >>> Call.execute(SquareRootCall(4), {}, {})
         2.0
-        >>> Call.execute(PlusCall(SquareRootCall(16), MinusCall(12, 13)), {})
+        >>> Call.execute(
+        ...     PlusCall(
+        ...         SquareRootCall(16),
+        ...         MinusCall(12, 13)
+        ...     ), {}, {})
         3.0
-        >>> Call.execute(PlusCall("foo", "bar"), {"foo":1, "bar":2})
+        >>> Call.execute(PlusCall("foo", "bar"), {"foo":1, "bar":2}, {})
         3
-        >>> Call.execute(SquareRootCall("abc"), {})
+        >>> Call.execute(SquareRootCall("abc"), {}, {})
         Traceback (most recent call last):
         ParsingError: Reference to unknown variable "abc".
         >>> # Note that this var name is *not* escaped
-        >>> Call.execute(LetCall("foo", 2, PlusCall("foo", 5)), {})
+        >>> Call.execute(LetCall("foo", 2, PlusCall("foo", 5)), {}, {})
         Traceback (most recent call last):
         ParsingError: Reference to unknown variable "foo".
         >>> # Whereas this one is
-        >>> Call.execute(LetCall("'bar", 16, SquareRootCall("bar")), {})
+        >>> Call.execute(LetCall("'bar", 16, SquareRootCall("bar")), {}, {})
         4.0
-        >>> Call.execute(EqualCall(1, 2), {})
+        >>> Call.execute(EqualCall(1, 2), {}, {})
         False
-        >>> Call.execute(EqualCall(1, 1, 1, 1), {})
+        >>> Call.execute(EqualCall(1, 1, 1, 1), {}, {})
         True
         """
         # First resolve all symbols
@@ -97,13 +101,13 @@ class Call(ABC):
 
         # Then we prepare the scope, adding any new vars
         # Things like "if" may modify it's args
-        sym_args, scope = self.prepare(scope, *sym_args)
+        sym_args, scope = self.prepare(scope, global_scope, *sym_args)
 
         # Then resolve the calls using the updated scope
         resolved_args = []
         for arg in sym_args:
             if isinstance(arg, Call):
-                arg = arg.execute(scope)
+                arg = arg.execute(scope, global_scope)
             resolved_args.append(arg)
 
         """
@@ -111,7 +115,7 @@ class Call(ABC):
         Remember that we validated the number of args
         when we built the Call objects.
         """
-        return self.apply(scope, *resolved_args)
+        return self.apply(scope, global_scope, *resolved_args)
 
 
 class EqualCall(Call):
@@ -119,7 +123,7 @@ class EqualCall(Call):
     num_args = 2
     name = "eq"
 
-    def apply(self, scope, *args):
+    def apply(self, scope, global_scope, *args):
         return len(set(args)) == 1
 
 
@@ -128,15 +132,15 @@ class IfCall(Call):
     num_args = 3
     name = "if"
 
-    def prepare(self, scope, *args):
+    def prepare(self, scope, global_scope, *args):
         condition = args[0]
         if isinstance(condition, Call):
-            condition = condition.execute(scope)
+            condition = condition.execute(scope, global_scope)
         # Choose the "then" or the "else"
         args = (args[1],) if condition else (args[2],)
         return args, scope
 
-    def apply(self, scope, *args):
+    def apply(self, scope, global_scope, *args):
         # The body has already been evaluated by this point
         return args[-1]
 
@@ -146,7 +150,7 @@ class PlusCall(Call):
     num_args = 1
     name = "+"
 
-    def apply(self, scope, *args):
+    def apply(self, scope, global_scope, *args):
         return reduce(operator.add, args)
 
 
@@ -155,7 +159,7 @@ class MinusCall(Call):
     num_args = 1
     name = "-"
 
-    def apply(self, scope, *args):
+    def apply(self, scope, global_scope, *args):
         if len(args) == 1:
             return -args[0]
         return reduce(operator.sub, args)
@@ -166,7 +170,7 @@ class SquareRootCall(Call):
     num_args = 1
     name = "sqrt"
 
-    def apply(self, scope, a):
+    def apply(self, scope, gobal_scope, a):
         return math.sqrt(a)
 
 
@@ -175,7 +179,7 @@ class PrintCall(Call):
     num_args = 1
     name = "print"
 
-    def apply(self, scope, *args):
+    def apply(self, scope, global_scope, *args):
         print(*args)
 
 
@@ -184,7 +188,7 @@ class LetCall(Call):
     num_args = 3
     name = "let"
 
-    def prepare(self, scope, *args):
+    def prepare(self, scope, global_scope, *args):
         # This is called before we evaluate the body
         # Inner scope, don't modify outer
         # E.g. (let 'x 1 (let 'y 2 (+ 1 y)) (+ x y))
@@ -193,7 +197,7 @@ class LetCall(Call):
 
         for k, v in pairwise(args[:-1]):
             if isinstance(v, Call):
-                v = v.execute(scope)
+                v = v.execute(scope, global_scope)
             scope[k] = v
         return args, scope
 
@@ -207,34 +211,69 @@ class LetCall(Call):
             raise ParsingError(
                 "Wrong number arguments for let. Expected {}".format(expect))
 
-    def apply(self, scope, *args):
+    def apply(self, scope, global_scope, *args):
         # The body has already been evaluated by this point
         return args[-1]
 
 
-def make_call(operator, args):
+class BaseUserCall(Call):
+    def prepare(self, scope, global_scope, *args):
+        # Add the names of the function args to the current
+        # scope with the values they're being called with.
+        scope = copy(scope)
+        # Note that there's no need to skip the body here.
+        # When we're processing the *defun* we need that.
+        # Here these args are the function's parameters.
+        for k, v in zip(self.arg_names, args):
+            scope[k] = v
+        return args, scope
+
+    def apply(self, scope, global_scope, *args):
+        # Run the body of the function with its parameters
+        return self.body.execute(scope, global_scope)
+
+
+def make_user_function(name, *args):
+    # Args in this case is the names of the arguments
+    # to this new function
+    return type(
+        "UserCall{}".format(name),
+        (BaseUserCall,),
+        {
+            "exact": True,
+            "name": name,
+            # -1 because last is the body of the function
+            "num_args": len(args)-1,
+            "arg_names": args[:-1],
+            # The code to be run (which is a Call by now)
+            "body": args[-1],
+        }
+    )
+
+
+def make_call(operator, args, global_scope):
     """
-    >>> make_call("ooo", [])
+    >>> make_call("ooo", [], {})
     Traceback (most recent call last):
     ParsingError: Call to unknown function "ooo".
-    >>> make_call("sqrt", [])
+    >>> make_call("sqrt", [], {})
     Traceback (most recent call last):
     ParsingError: Expected 1 argument for function "sqrt", got 0.
-    >>> make_call("sqrt", [2, 3])
+    >>> make_call("sqrt", [2, 3], {})
     Traceback (most recent call last):
     ParsingError: Expected 1 argument for function "sqrt", got 2.
-    >>> make_call("+", [])
+    >>> make_call("+", [], {})
     Traceback (most recent call last):
     ParsingError: Expected at least 1 argument for function "+", got 0.
-    >>> make_call("let", [1, 2])
+    >>> make_call("let", [1, 2], {})
     Traceback (most recent call last):
     ParsingError: Too few arguments for let. \
 Expected (let <name> <value> ... (body))
-    >>> make_call("let", [1, 2, 3, 4])
+    >>> make_call("let", [1, 2, 3, 4], {})
     Traceback (most recent call last):
     ParsingError: Wrong number arguments for let. \
 Expected (let <name> <value> ... (body))
-    >>> make_call("eq", [1])
+    >>> make_call("eq", [1], {})
     Traceback (most recent call last):
     ParsingError: Expected at least 2 arguments for function "eq", got 1.
     """
@@ -251,13 +290,32 @@ Expected (let <name> <value> ... (body))
         # Functions cannot return callables
         raise ParsingError("Expected function name, got a call to a function.")
 
-    for call_type in calls:
-        if call_type.name == operator:
-            break
-    else:
-        raise ParsingError("Call to unknown function \"{}\".".format(operator))
+    # First check for a user function
+    try:
+        return global_scope[operator](*args)
+    except KeyError:
+        # Look for a builtin function
+        for call_type in calls:
+            if call_type.name == operator:
+                break
+        else:
+            # Maybe we're defining a user function
+            if operator == "defun":
+                # Add a new Call type to global scope
+                # 1: to remove the ' escape
+                unescaped_args = [a[1:] for a in args[:-1]]
+                # Obviously leave the body as it is
+                unescaped_args.append(args[-1])
+                new_func_type = make_user_function(*unescaped_args)
+                global_scope[unescaped_args[0]] = new_func_type
 
-    return call_type(*args)
+                # Defining a new function doesn't return anything
+                return
+            else:
+                raise ParsingError(
+                    "Call to unknown function \"{}\".".format(operator))
+
+        return call_type(*args)
 
 
 def get_symbol(src, idx):
@@ -281,22 +339,22 @@ def get_symbol(src, idx):
     return symbol, idx
 
 
-def process_call(src, idx):
+def process_call(src, idx, global_scope):
     """
-    >>> process_call("+ 1 2)", 0)
+    >>> process_call("+ 1 2)", 0, {})
     Traceback (most recent call last):
     ParsingError: Call must begin with "(".
-    >>> process_call("(+ 1 2", 0)
+    >>> process_call("(+ 1 2", 0, {})
     Traceback (most recent call last):
     ParsingError: Unterminated call to function "+"
-    >>> process_call("(- (sqrt 2", 0)
+    >>> process_call("(- (sqrt 2", 0, {})
     Traceback (most recent call last):
     ParsingError: Unterminated call to function "sqrt"
-    >>> process_call("(+ 1 2 3 4 5 6)", 0)[0]
+    >>> process_call("(+ 1 2 3 4 5 6)", 0, {})[0]
     +('1', '2', '3', '4', '5', '6')
-    >>> process_call("(- (+ 1 (- 1 2)) 5)", 0)[0]
+    >>> process_call("(- (+ 1 (- 1 2)) 5)", 0, {})[0]
     -(+('1', -('1', '2')), '5')
-    >>> process_call("((+ 1 2))", 0)[0]
+    >>> process_call("((+ 1 2))", 0, {})[0]
     Traceback (most recent call last):
     ParsingError: Expected function name, got a call to a function.
     """
@@ -308,11 +366,12 @@ def process_call(src, idx):
 
     while idx < len(src):
         if src[idx] == "(":
-            call, idx = process_call(src, idx)
+            call, idx, global_scope = process_call(src, idx, global_scope)
             parts.append(call)
         elif src[idx] == ")":
             # Note the +1 here to consume the closing bracket
-            return make_call(parts[0], parts[1:]), idx+1
+            return make_call(
+                parts[0], parts[1:], global_scope), idx+1, global_scope
         elif src[idx] in string.whitespace:
             # Whitespace around () will have been removed but
             # it is still in between arguments
@@ -380,6 +439,23 @@ def run_source(source):
     ...     )\\
     ...   )")
     hello
+    >>> run_source("(defun 'add 'a 'b (+ a b)) (add 1 2)")
+    3
+    >>> # C rules, B must be defined before A
+    >>> run_source(
+    ...  "(defun 'B 'y (+ y 10))\\
+    ...   (defun 'A 'x (+ (B x) 1))\\
+    ...   (A 24)")
+    35
+    >>> #TODO: this should not define "bar"
+    >>> run_source(
+    ... "(if (+ 1)\\
+    ...     (defun 'foo 'x (+ x))\\
+    ...     (defun 'bar 'x (+ x))\\
+    ...  )\\
+    ...  (foo 1)\\
+    ...  (bar 2)")
+    2
     """
     if not source:
         return
@@ -387,15 +463,17 @@ def run_source(source):
     source = normalise(source)
     bodies = []
     idx = 0
+    # Where user functions are added to
+    global_scope = {}
 
     while idx < len(source):
-        body, idx = process_call(source, idx)
+        body, idx, global_scope = process_call(source, idx, global_scope)
         if body:
             bodies.append(body)
 
     for body in bodies[:-1]:
-        body.execute({})
-    return bodies[-1].execute({})
+        body.execute({}, global_scope)
+    return bodies[-1].execute({}, global_scope)
 
 
 if __name__ == "__main__":
