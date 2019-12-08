@@ -270,7 +270,16 @@ class LastCall(Call):
     num_args = 1
 
     def apply(self, scope, global_scope, ls):
-        return ls[-1]
+        return NthCall.apply(self, scope, global_scope, -1, ls)
+
+
+class NthCall(Call):
+    name = "nth"
+    exact = True
+    num_args = 2
+
+    def apply(self, scope, global_scope, idx, ls):
+        return ls[idx]
 
 
 class BaseUserCall(Call):
@@ -427,6 +436,7 @@ Expected (let <name> <value> ... (body))
         ModulusCall,
         DefineFunctionCall,
         ListCall,
+        NthCall,
         LastCall,
     ]
     if isinstance(fn_name, Call):
@@ -683,6 +693,11 @@ def run_source(source):
     >>> run_source("(if (eq 1 2) (+ 1))")
     >>> run_source("(if (eq 1 1) (+ 1))")
     1
+    >>> run_source("(nth 1 (list 1 2 3))")
+    2
+    >>> # Python index rules apply
+    >>> run_source("(nth -1 (list (+ 1 1) (+ 2 2)))")
+    4
     """
     if not source:
         return
