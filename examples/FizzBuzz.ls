@@ -17,8 +17,7 @@
         )
       )
       # >98 reaches Python's maximum recursion depth
-      (if (eq n 98)
-        (print "")
+      (if (< n 98)
         (fizzbuzz (+ n 1))
       )
     )

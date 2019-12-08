@@ -5,7 +5,6 @@
         (print n)
         (if (< n 100)
           (fib y n)
-          (print "")
         )
       )
     )

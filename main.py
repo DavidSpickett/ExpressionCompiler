@@ -145,21 +145,33 @@ class LessThanCall(Call):
 
 
 class IfCall(Call):
-    exact = True
-    num_args = 3
+    exact = False
+    num_args = 2
     name = "if"
 
     def prepare(self, scope, global_scope, *args):
         condition = args[0]
         if isinstance(condition, Call):
             condition = condition.execute(scope, global_scope)
-        # Choose the "then" or the "else"
-        args = (args[1],) if condition else (args[2],)
+
+        if condition:
+            # Applies to either then or then and else
+            args = (args[1],)
+        elif len(args) == 3:
+            args = (args[2],)
+        else:
+            # Only "then" and condition is Falise
+            args = []
+
         return args, scope
 
     def apply(self, scope, global_scope, *args):
         # The body has already been evaluated by this point
-        return args[-1]
+        try:
+            return args[-1]
+        except IndexError:
+            # Only "then" and condition was False so no body
+            pass
 
 
 class ModulusCall(Call):
@@ -667,6 +679,10 @@ def run_source(source):
     -1
     >>> run_source("(list (< 2 1) (< 1 2))")
     (False, True)
+    >>> # Ifs can just have the "then" block, no "else"
+    >>> run_source("(if (eq 1 2) (+ 1))")
+    >>> run_source("(if (eq 1 1) (+ 1))")
+    1
     """
     if not source:
         return
