@@ -135,6 +135,15 @@ class EqualCall(Call):
         return len(set(args)) == 1
 
 
+class LessThanCall(Call):
+    exact = True
+    num_args = 2
+    name = "<"
+
+    def apply(self, scope, global_scope, lhs, rhs):
+        return lhs < rhs
+
+
 class IfCall(Call):
     exact = True
     num_args = 3
@@ -402,6 +411,7 @@ Expected (let <name> <value> ... (body))
         IfCall,
         PrintCall,
         EqualCall,
+        LessThanCall,
         ModulusCall,
         DefineFunctionCall,
         ListCall,
@@ -655,6 +665,8 @@ def run_source(source):
     4
     >>> run_source("(last (list (+ 1) (- 1)))")
     -1
+    >>> run_source("(list (< 2 1) (< 1 2))")
+    (False, True)
     """
     if not source:
         return
