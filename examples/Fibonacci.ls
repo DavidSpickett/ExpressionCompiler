@@ -2,12 +2,10 @@
 
 (defun 'fib 'x 'y
   (let 'n (+ x y)
-    (last
-      (list
-        (print n)
-        (if (< n 100)
-          (fib y n)
-        )
+    (body
+      (print n)
+      (if (< n 100)
+        (fib y n)
       )
     )
   )

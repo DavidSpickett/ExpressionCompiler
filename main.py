@@ -298,29 +298,14 @@ class BaseUserCall(Call):
          prepare step then expressions won't be resolved.
          Here: (f (+ 1 2)) has become (f 3) already
         """
-        for k, v in zip(self.arg_names, args):
-            scope[k] = v
+        if self.variadic:
+            scope["*"] = args
+        else:
+            for k, v in zip(self.arg_names, args):
+                scope[k] = v
 
         # Run the body of the function with its parameters
         return self.body.execute(scope, global_scope)
-
-
-def make_user_function(name, *args):
-    # Args in this case is the names of the arguments
-    # to this new function
-    return type(
-        "UserCall{}".format(name),
-        (BaseUserCall,),
-        {
-            "exact": True,
-            "name": name,
-            # -1 because last is the body of the function
-            "num_args": len(args)-1,
-            "arg_names": args[:-1],
-            # The code to be run (which is a Call by now)
-            "body": args[-1],
-        }
-    )
 
 
 class DefineFunctionCall(Call):
@@ -330,7 +315,12 @@ class DefineFunctionCall(Call):
 
     def __init__(self, *args):
         super().__init__(*args)
+        self.variadic = self.args[1] == "'*"
         self.body = None
+
+        if self.variadic and len(args) != 3:
+            raise ParsingError(
+                "Variadic functions can only have \"*\" as a parameter.")
 
     def prepare(self, scope, global_scope, *args):
         """
@@ -359,12 +349,13 @@ class DefineFunctionCall(Call):
             "UserCall{}".format(name),
             (BaseUserCall,),
             {
-                "exact": True,
+                "exact": not self.variadic,
                 "name": name,
-                "num_args": len(args),
+                "num_args": 0 if self.variadic else len(args),
                 "arg_names": args,
                 # The code to be run (which is a Call by now)
                 "body": self.body,
+                "variadic": self.variadic
             }
         )
 
