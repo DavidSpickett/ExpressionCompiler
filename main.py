@@ -243,19 +243,28 @@ class ListCall(Call):
         return args
 
 
+class LastCall(Call):
+    name = "last"
+    exact = True
+    num_args = 1
+
+    def apply(self, scope, global_scope, ls):
+        return ls[-1]
+
+
 class BaseUserCall(Call):
-    def prepare(self, scope, global_scope, *args):
-        # Add the names of the function args to the current
-        # scope with the values they're being called with.
+    def apply(self, scope, global_scope, *args):
         scope = copy(scope)
-        # Note that there's no need to skip the body here.
-        # When we're processing the *defun* we need that.
-        # Here these args are the function's parameters.
+
+        """
+         No function body here that's handled in the defun
+         Do the binding now because if we did it in the
+         prepare step then expressions won't be resolved.
+         Here: (f (+ 1 2)) has become (f 3) already
+        """
         for k, v in zip(self.arg_names, args):
             scope[k] = v
-        return args, scope
 
-    def apply(self, scope, global_scope, *args):
         # Run the body of the function with its parameters
         return self.body.execute(scope, global_scope)
 
@@ -326,11 +335,44 @@ class DefineFunctionCall(Call):
         # We don't return anything here, just add a fn to global scope
 
 
-def make_call(operator, args, global_scope):
+class MaybeFunctionCall(Call):
+    """ Placeholder for a user function call
+        to something not defined yet.
+        E.g. (defun 'f (f))
+        "f" is not defined until the defun
+        has added it to the global scope.
+        So insert a maybe function call for
+        (f) and check that it exists when
+        we come to run it.
     """
+    num_args = 0
+    exact = False
+
+    def __init__(self, name, *args):
+        self.name = name
+        super().__init__(*args)
+
+    def apply(self, scope, global_scope, *args):
+        try:
+            real_fn = global_scope[self.name]
+        except KeyError:
+            raise ParsingError(
+                "Call to unknown function \"{}\".".format(self.name))
+        # Make an instance of it
+        # Note that we use the pre-evaluation args here
+        # though at the moment we only check the number of args
+        # not the types. So we could use the paramater args instead.
+        real_fn = real_fn(*self.args)
+
+        # Then the post evaluation args here
+        return real_fn.apply(scope, global_scope, *args)
+
+
+def make_call(fn_name, args, global_scope):
+    """
+    >>> # User function names aren't resolved here
     >>> make_call("ooo", [], {})
-    Traceback (most recent call last):
-    ParsingError: Call to unknown function "ooo".
+    ooo()
     >>> make_call("sqrt", [], {})
     Traceback (most recent call last):
     ParsingError: Expected 1 argument for function "sqrt", got 0.
@@ -363,22 +405,23 @@ Expected (let <name> <value> ... (body))
         ModulusCall,
         DefineFunctionCall,
         ListCall,
+        LastCall,
     ]
-    if isinstance(operator, Call):
+    if isinstance(fn_name, Call):
         # Functions cannot return callables
         raise ParsingError("Expected function name, got a call to a function.")
 
     # First check for a user function
     try:
-        return global_scope[operator](*args)
+        return global_scope[fn_name](*args)
     except KeyError:
         # Look for a builtin function
         for call_type in calls:
-            if call_type.name == operator:
+            if call_type.name == fn_name:
                 break
         else:
-            raise ParsingError(
-                    "Call to unknown function \"{}\".".format(operator))
+            # Maybe this is a user func defined later
+            return MaybeFunctionCall(fn_name, *args)
 
         return call_type(*args)
 
@@ -592,6 +635,26 @@ def run_source(source):
     1
     2
     (None, None)
+    >>> # Arguments for user funcs can be expressions
+    >>> run_source(
+    ... "(defun 'f 'n (print n))\\
+    ...  (f (+ 1 2))")
+    3
+    >>> run_source("(last (list 1 2 3 4))")
+    4
+    >>> run_source(
+    ... "(defun 'f\\
+    ...    (last\\
+    ...      (list\\
+    ...        (+ 1 1)\\
+    ...        (+ 2 2)\\
+    ...      )\\
+    ...    )\\
+    ...  )\\
+    ...  (f)")
+    4
+    >>> run_source("(last (list (+ 1) (- 1)))")
+    -1
     """
     if not source:
         return
