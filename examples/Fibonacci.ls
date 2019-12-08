@@ -1,3 +1,5 @@
+(import "lib/lib.ls")
+
 (defun 'fib 'x 'y
   (let 'n (+ x y)
     (last

@@ -264,15 +264,6 @@ class ListCall(Call):
         return args
 
 
-class LastCall(Call):
-    name = "last"
-    exact = True
-    num_args = 1
-
-    def apply(self, scope, global_scope, ls):
-        return NthCall.apply(self, scope, global_scope, -1, ls)
-
-
 class NthCall(Call):
     name = "nth"
     exact = True
@@ -280,6 +271,21 @@ class NthCall(Call):
 
     def apply(self, scope, global_scope, idx, ls):
         return ls[idx]
+
+
+class ImportCall(Call):
+    name = "import"
+    exact = True
+    num_args = 1
+
+    def prepare(self, scope, global_scope, filepath):
+        with open(filepath, 'r') as f:
+            _, global_scope = run_source_inner(
+                f.read(), global_scope=global_scope)
+        return (), scope
+
+    def apply(self, scope, global_scope, *args):
+        pass
 
 
 class BaseUserCall(Call):
@@ -437,7 +443,7 @@ Expected (let <name> <value> ... (body))
         DefineFunctionCall,
         ListCall,
         NthCall,
-        LastCall,
+        ImportCall,
     ]
     if isinstance(fn_name, Call):
         # Functions cannot return callables
@@ -544,6 +550,31 @@ def normalise(source):
                   re.sub(r"\s+", " ",
                          # remove comments
                          re.sub(r"#.*(\n)?", "", source)))
+
+
+# Call this one when you want to get the resulting global scope
+def run_source_inner(source, global_scope=None):
+    if global_scope is None:
+        # Where user functions are added to
+        global_scope = {}
+
+    source = normalise(source)
+    idx = 0
+    result = None
+
+    if not source:
+        return result, global_scope
+
+    while idx < len(source):
+        body, idx, global_scope = process_call(source, idx, global_scope)
+        if body:
+            # Execute as we go so that new functions are defined
+            # Each new block will have a new scope
+            # The global scope will be updated during blocks
+            result = body.execute({}, global_scope)
+
+    # program's return value is the return of the last block
+    return result, global_scope
 
 
 def run_source(source):
@@ -672,21 +703,6 @@ def run_source(source):
     ... "(defun 'f 'n (print n))\\
     ...  (f (+ 1 2))")
     3
-    >>> run_source("(last (list 1 2 3 4))")
-    4
-    >>> run_source(
-    ... "(defun 'f\\
-    ...    (last\\
-    ...      (list\\
-    ...        (+ 1 1)\\
-    ...        (+ 2 2)\\
-    ...      )\\
-    ...    )\\
-    ...  )\\
-    ...  (f)")
-    4
-    >>> run_source("(last (list (+ 1) (- 1)))")
-    -1
     >>> run_source("(list (< 2 1) (< 1 2))")
     (False, True)
     >>> # Ifs can just have the "then" block, no "else"
@@ -699,25 +715,7 @@ def run_source(source):
     >>> run_source("(nth -1 (list (+ 1 1) (+ 2 2)))")
     4
     """
-    if not source:
-        return
-
-    source = normalise(source)
-    idx = 0
-    # Where user functions are added to
-    global_scope = {}
-
-    result = None
-    while idx < len(source):
-        body, idx, global_scope = process_call(source, idx, global_scope)
-        if body:
-            # Execute as we go so that new functions are defined
-            # Each new block will have a new scope
-            # The global scope will be updated during blocks
-            result = body.execute({}, global_scope)
-
-    # program's return value is the return of the last block
-    return result
+    return run_source_inner(source)[0]
 
 
 if __name__ == "__main__":

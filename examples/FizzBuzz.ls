@@ -1,3 +1,5 @@
+(import "lib/lib.ls")
+
 (defun 'fizzbuzz 'n
   # So we only see one None not 99 nested
   (last
@@ -16,8 +18,8 @@
           (print n)
         )
       )
-      # >98 reaches Python's maximum recursion depth
-      (if (< n 98)
+      # >97 reaches Python's maximum recursion depth
+      (if (< n 97)
         (fizzbuzz (+ n 1))
       )
     )
