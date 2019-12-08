@@ -83,6 +83,10 @@ class Call(ABC):
         >>> # Show that the body is not evaluated
         >>> Call.execute(
         ...     DefineFunctionCall("'x", "'y", PlusCall("x", "y")), {}, {})
+        >>> Call.execute(ListCall(PlusCall(1, 1), PlusCall(2, 2)), {}, {})
+        (2, 4)
+        >>> Call.execute(ListCall(), {}, {})
+        ()
         """
         # First resolve all symbols
         sym_args = []
@@ -229,6 +233,16 @@ class LetCall(Call):
         return args[-1]
 
 
+class ListCall(Call):
+    name = "list"
+    exact = False
+    num_args = 0
+
+    def apply(self, scope, global_scope, *args):
+        # All arguments will have been executed by now
+        return args
+
+
 class BaseUserCall(Call):
     def prepare(self, scope, global_scope, *args):
         # Add the names of the function args to the current
@@ -348,6 +362,7 @@ Expected (let <name> <value> ... (body))
         EqualCall,
         ModulusCall,
         DefineFunctionCall,
+        ListCall,
     ]
     if isinstance(operator, Call):
         # Functions cannot return callables
@@ -567,6 +582,16 @@ def run_source(source):
     ... (print \\"No hashes in strings. *sadface*\\")")
     3
     No hashes in strings. *sadface*
+    >>> run_source(
+    ... "(let 'x 1\\
+    ...    (list\\
+    ...      (print x)\\
+    ...      (print (+ x 1))\\
+    ...    )\\
+    ...  )")
+    1
+    2
+    (None, None)
     """
     if not source:
         return
