@@ -83,10 +83,6 @@ class Call(ABC):
         >>> # Show that the body is not evaluated
         >>> Call.execute(
         ...     DefineFunctionCall("'x", "'y", PlusCall("x", "y")), {}, {})
-        >>> Call.execute(ListCall(PlusCall(1, 1), PlusCall(2, 2)), {}, {})
-        (2, 4)
-        >>> Call.execute(ListCall(), {}, {})
-        ()
         """
         # First resolve all symbols
         sym_args = []
@@ -254,14 +250,13 @@ class LetCall(Call):
         return args[-1]
 
 
-class ListCall(Call):
-    name = "list"
-    exact = False
-    num_args = 0
+class LenCall(Call):
+    name = "len"
+    exact = True
+    num_args = 1
 
-    def apply(self, scope, global_scope, *args):
-        # All arguments will have been executed by now
-        return args
+    def apply(self, scope, global_scope, ls):
+        return len(ls)
 
 
 class NthCall(Call):
@@ -298,11 +293,11 @@ class BaseUserCall(Call):
          prepare step then expressions won't be resolved.
          Here: (f (+ 1 2)) has become (f 3) already
         """
-        if self.variadic:
-            scope["*"] = args
-        else:
-            for k, v in zip(self.arg_names, args):
-                scope[k] = v
+        for idx in range(len(args)):
+            if self.arg_names[idx] == "*":
+                scope["*"] = args[idx:]
+                break
+            scope[self.arg_names[idx]] = args[idx]
 
         # Run the body of the function with its parameters
         return self.body.execute(scope, global_scope)
@@ -315,12 +310,15 @@ class DefineFunctionCall(Call):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self.variadic = self.args[1] == "'*"
         self.body = None
+        self.variadic = False
 
-        if self.variadic and len(args) != 3:
-            raise ParsingError(
-                "Variadic functions can only have \"*\" as a parameter.")
+        var = "'*"
+        if var in self.args:
+            if self.args.index("'*") != len(self.args)-2:
+                raise ParsingError(
+                    "\"'*\" must be the last parameter if present.")
+            self.variadic = True
 
     def prepare(self, scope, global_scope, *args):
         """
@@ -432,8 +430,8 @@ Expected (let <name> <value> ... (body))
         LessThanCall,
         ModulusCall,
         DefineFunctionCall,
-        ListCall,
         NthCall,
+        LenCall,
         ImportCall,
     ]
     if isinstance(fn_name, Call):
@@ -679,32 +677,19 @@ def run_source(source):
     ... (print \\"No hashes in strings. *sadface*\\")")
     3
     No hashes in strings. *sadface*
-    >>> run_source(
-    ... "(let 'x 1\\
-    ...    (list\\
-    ...      (print x)\\
-    ...      (print (+ x 1))\\
-    ...    )\\
-    ...  )")
-    1
-    2
-    (None, None)
     >>> # Arguments for user funcs can be expressions
     >>> run_source(
     ... "(defun 'f 'n (print n))\\
     ...  (f (+ 1 2))")
     3
-    >>> run_source("(list (< 2 1) (< 1 2))")
-    (False, True)
     >>> # Ifs can just have the "then" block, no "else"
     >>> run_source("(if (eq 1 2) (+ 1))")
     >>> run_source("(if (eq 1 1) (+ 1))")
     1
-    >>> run_source("(nth 1 (list 1 2 3))")
-    2
-    >>> # Python index rules apply
-    >>> run_source("(nth -1 (list (+ 1 1) (+ 2 2)))")
-    4
+    >>> run_source("(defun 'f 'a '* (+ a *))")
+    >>> run_source("(defun 'g '* 'a (+ a *))")
+    Traceback (most recent call last):
+    ParsingError: "'*" must be the last parameter if present.
     """
     return run_source_inner(source)[0]
 
