@@ -66,9 +66,10 @@ class Call(ABC):
         self.validate_args()
 
     def __repr__(self):
-        return "{}({})".format(
-          self.name,
-          ", ".join(map(repr, self.args))
+        # Print in lisp format (f arg1 arg2)
+        return "({}{}{})".format(
+          self.name, " " if self.args else "",
+          " ".join(map(repr, self.args))
         )
 
     def validate_args(self):
@@ -108,12 +109,12 @@ class Call(ABC):
         3
         >>> Call.execute(SquareRootCall("abc"), {}, {})
         Traceback (most recent call last):
-        ParsingError: Reference to unknown symbol "abc" in "sqrt('abc')".
+        ParsingError: Reference to unknown symbol "abc" in "(sqrt 'abc')".
         >>> # Note that this var name is *not* escaped
         >>> Call.execute(LetCall("foo", 2, PlusCall("foo", 5)), {}, {})
         Traceback (most recent call last):
         ParsingError: Reference to unknown symbol "foo" \
-in "let('foo', 2, +('foo', 5))".
+in "(let 'foo' 2 (+ 'foo' 5))".
         >>> # Whereas this one is
         >>> Call.execute(LetCall("'bar", 16, SquareRootCall("bar")), {}, {})
         4.0
@@ -324,7 +325,7 @@ class FlattenCall(Call):
         ()
         >>> FlattenCall("foo").apply({}, {}, 1)
         Traceback (most recent call last):
-        ParsingError: Flatten "flatten('foo')" not called with a list.
+        ParsingError: Flatten "(flatten 'foo')" not called with a list.
         >>> FlattenCall.apply(None, {}, {}, [1, 2, 3])
         (1, 2, 3)
         >>> FlattenCall.apply(None, {}, {}, [[1, 2], 3])
@@ -490,7 +491,7 @@ def make_call(fn_name, args, global_scope):
     """
     >>> # User function names aren't resolved here
     >>> make_call("ooo", [], {})
-    ooo()
+    (ooo)
     >>> make_call("sqrt", [], {})
     Traceback (most recent call last):
     ParsingError: Expected 1 argument for function "sqrt", got 0.
@@ -506,7 +507,7 @@ def make_call(fn_name, args, global_scope):
 Expected (let <name> <value> ... (body))
     >>> make_call("let", [1, 2, 3, 4], {})
     Traceback (most recent call last):
-    ParsingError: Wrong number arguments for let "let(1, 2, 3, 4)". \
+    ParsingError: Wrong number arguments for let "(let 1 2 3 4)". \
 Expected (let <name> <value> ... (body))
     >>> make_call("eq", [1], {})
     Traceback (most recent call last):
@@ -582,13 +583,13 @@ def process_call(src, idx, global_scope):
     Traceback (most recent call last):
     ParsingError: Unterminated call to function "sqrt"
     >>> process_call("(+ 1 2 3 4 5 6)", 0, {})[0]
-    +('1', '2', '3', '4', '5', '6')
+    (+ '1' '2' '3' '4' '5' '6')
     >>> process_call("(- (+ 1 (- 1 2)) 5)", 0, {})[0]
-    -(+('1', -('1', '2')), '5')
+    (- (+ '1' (- '1' '2')) '5')
     >>> process_call("((+ 1 2))", 0, {})[0]
     Traceback (most recent call last):
     ParsingError: Expected function name, got a call \
-to a function "+('1', '2')".
+to a function "(+ '1' '2')".
     """
     if src[idx] != "(":
         raise ParsingError("Call must begin with \"(\".")
@@ -676,7 +677,7 @@ def run_source(source):
     2
     >>> run_source("(let 'x (let 'y 1 (+ y 0)) (+ x y))")
     Traceback (most recent call last):
-    ParsingError: Reference to unknown symbol "y" in "+('x', 'y')".
+    ParsingError: Reference to unknown symbol "y" in "(+ 'x' 'y')".
     >>> run_source("(let 'x 1 (let 'y 2 (+ x y)))")
     3
     >>> # Declare multiple variables in one let
@@ -736,7 +737,7 @@ def run_source(source):
     ...  (foo 1)\\
     ...  (bar 2)")
     Traceback (most recent call last):
-    ParsingError: Reference to unknown symbol "bar" in "bar('2')".
+    ParsingError: Reference to unknown symbol "bar" in "(bar '2')".
     >>> # We can define a function with a different body
     >>> run_source(
     ... "(if (+ 0)\\
