@@ -42,20 +42,21 @@
   (+ *)
 )
 
-(defun '__apply_inner 'varname 'ls 'fn 'idx
-  (if (< idx (len ls))
-    (let 'v (nth idx ls)
-      (body
-        (fn v)
-        (__apply_inner varname ls fn (+ idx 1))
-      )
-    )
-  )
-)
-
 # Apply fn to all items of ls, return nothing
 (defun 'apply 'varname 'ls 'fn
-  (__apply_inner varname ls fn 0)
+  (let '__apply_inner
+    (defun ' 'varname 'ls 'fn 'idx
+      (if (< idx (len ls))
+        (let 'v (nth idx ls)
+          (body
+            (fn v)
+            (__apply_inner varname ls fn (+ idx 1))
+          )
+        )
+      )
+    )
+    (__apply_inner varname ls fn 0)
+  )
 )
 
 (defun 'reverse 'ls
