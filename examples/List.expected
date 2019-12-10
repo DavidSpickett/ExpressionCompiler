@@ -1,0 +1,17 @@
+The list: (1, 2, 3, 4)
+The expanded list: 1 2 3 4
+Head: 1
+Last: 4
+Tail: (2, 3, 4)
+Apply function:
+1
+2
+3
+4
+Apply anonymous Function:
+1
+2
+3
+4
+Reverse: (4, 3, 2, 1)
+None

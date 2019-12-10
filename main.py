@@ -68,11 +68,12 @@ class Call(ABC):
         3
         >>> Call.execute(SquareRootCall("abc"), {}, {})
         Traceback (most recent call last):
-        ParsingError: Reference to unknown variable "abc".
+        ParsingError: Reference to unknown variable "abc" in "sqrt('abc')".
         >>> # Note that this var name is *not* escaped
         >>> Call.execute(LetCall("foo", 2, PlusCall("foo", 5)), {}, {})
         Traceback (most recent call last):
-        ParsingError: Reference to unknown variable "foo".
+        ParsingError: Reference to unknown variable "foo" \
+in "let('foo', 2, +('foo', 5))".
         >>> # Whereas this one is
         >>> Call.execute(LetCall("'bar", 16, SquareRootCall("bar")), {}, {})
         4.0
@@ -83,9 +84,13 @@ class Call(ABC):
         >>> # Show that the body is not evaluated
         >>> Call.execute(
         ...     DefineFunctionCall("'x", "'y", PlusCall("x", "y")), {}, {})
+        <class 'abc.UserCall_x'>
         """
         # First resolve all symbols
         sym_args = []
+        # Whether to expand a list into flat arguments
+        # (print *ls) => (print ls[0] ls[1] ...)
+        expand = False
         for arg in self.args:
             if isinstance(arg, str):
                 if arg.startswith("'"):
@@ -95,13 +100,27 @@ class Call(ABC):
                     try:
                         arg = int(arg)
                     except ValueError:
+                        # Do list expansion
+                        if arg.startswith("*") and len(arg) > 1:
+                            arg = arg[1:]
+                            expand = True
+
                         try:
+                            # Local scope first
                             arg = scope[arg]
                         except KeyError:
-                            msg = "Reference to unknown variable \"{}\"."
-                            raise ParsingError(msg.format(arg))
+                            try:
+                                arg = global_scope[arg]
+                            except KeyError:
+                                # TODO: urgh, rewrite this whole block
+                                msg = "Reference to unknown variable \
+\"{}\" in \"{}\"."
+                                raise ParsingError(msg.format(arg, self))
 
-            sym_args.append(arg)
+            if expand:
+                sym_args.extend(arg)
+            else:
+                sym_args.append(arg)
 
         # Then we prepare the scope, adding any new vars
         # Things like "if" may modify it's args
@@ -210,7 +229,7 @@ class SquareRootCall(Call):
 
 class PrintCall(Call):
     exact = False
-    num_args = 1
+    num_args = 0
     name = "print"
 
     def apply(self, scope, global_scope, *args):
@@ -243,7 +262,8 @@ class LetCall(Call):
                 "Too few arguments for let. Expected {}".format(expect))
         elif not num_args % 2:
             raise ParsingError(
-                "Wrong number arguments for let. Expected {}".format(expect))
+                "Wrong number arguments for let \"{}\". \
+Expected {}".format(self, expect))
 
     def apply(self, scope, global_scope, *args):
         # The body has already been evaluated by this point
@@ -266,6 +286,45 @@ class NthCall(Call):
 
     def apply(self, scope, global_scope, idx, ls):
         return ls[idx]
+
+
+class FlattenCall(Call):
+    name = "flatten"
+    exact = True
+    num_args = 1
+
+    def apply(self, scope, global_scope, ls):
+        """
+        >>> FlattenCall.apply(None, {}, {}, [])
+        ()
+        >>> FlattenCall("foo").apply({}, {}, 1)
+        Traceback (most recent call last):
+        ParsingError: Flatten "flatten('foo')" not called with a list.
+        >>> FlattenCall.apply(None, {}, {}, [1, 2, 3])
+        (1, 2, 3)
+        >>> FlattenCall.apply(None, {}, {}, [[1, 2], 3])
+        (1, 2, 3)
+        >>> FlattenCall.apply(None, {}, {}, [[[1, 2]], [3], [4, [5]]])
+        (1, 2, 3, 4, 5)
+        """
+        flat = []
+
+        def _flatten(_ls):
+            try:
+                for l in _ls:
+                    try:
+                        iter(l)
+                        _flatten(l)
+                    except TypeError:
+                        flat.append(l)
+            except TypeError:
+                raise ParsingError(
+                    "Flatten \"{}\" not called with a list.".format(self))
+
+        _flatten(ls)
+
+        # Tuple for consistency when printing
+        return tuple(flat)
 
 
 class ImportCall(Call):
@@ -293,6 +352,12 @@ class BaseUserCall(Call):
          prepare step then expressions won't be resolved.
          Here: (f (+ 1 2)) has become (f 3) already
         """
+
+        # Make star empty as default in case they only
+        # call with positional args. It must still be defined.
+        if self.arg_names and self.arg_names[-1] == "*":
+            scope["*"] = ()
+
         for idx in range(len(args)):
             if self.arg_names[idx] == "*":
                 scope["*"] = args[idx:]
@@ -344,7 +409,7 @@ class DefineFunctionCall(Call):
         args = args[1:]
 
         global_scope[name] = type(
-            "UserCall{}".format(name),
+            "UserCall_{}".format(name),
             (BaseUserCall,),
             {
                 "exact": not self.variadic,
@@ -357,7 +422,8 @@ class DefineFunctionCall(Call):
             }
         )
 
-        # We don't return anything here, just add a fn to global scope
+        # Return the function itself, so it can be used as an argument
+        return global_scope[name]
 
 
 class MaybeFunctionCall(Call):
@@ -378,16 +444,26 @@ class MaybeFunctionCall(Call):
         super().__init__(*args)
 
     def apply(self, scope, global_scope, *args):
+        # TODO: make a lookup function for this
         try:
-            real_fn = global_scope[self.name]
+            # Local vars come first
+            real_fn = scope[self.name]
         except KeyError:
-            raise ParsingError(
-                "Call to unknown function \"{}\".".format(self.name))
+            try:
+                real_fn = global_scope[self.name]
+            except KeyError:
+                raise ParsingError(
+                    "Call to unknown function \"{}\".".format(self.name))
+
         # Make an instance of it
         # Note that we use the pre-evaluation args here
         # though at the moment we only check the number of args
         # not the types. So we could use the paramater args instead.
-        real_fn = real_fn(*self.args)
+        try:
+            real_fn = real_fn(*self.args)
+        except TypeError:
+            raise RuntimeError("\"{}\" is not a function, it is {}.".format(
+                               self.name, real_fn))
 
         # Then the post evaluation args here
         return real_fn.apply(scope, global_scope, *args)
@@ -413,7 +489,7 @@ def make_call(fn_name, args, global_scope):
 Expected (let <name> <value> ... (body))
     >>> make_call("let", [1, 2, 3, 4], {})
     Traceback (most recent call last):
-    ParsingError: Wrong number arguments for let. \
+    ParsingError: Wrong number arguments for let "let(1, 2, 3, 4)". \
 Expected (let <name> <value> ... (body))
     >>> make_call("eq", [1], {})
     Traceback (most recent call last):
@@ -433,10 +509,12 @@ Expected (let <name> <value> ... (body))
         NthCall,
         LenCall,
         ImportCall,
+        FlattenCall,
     ]
     if isinstance(fn_name, Call):
         # Functions cannot return callables
-        raise ParsingError("Expected function name, got a call to a function.")
+        raise ParsingError("Expected function name, got a call \
+to a function \"{}\".".format(fn_name))
 
     # First check for a user function
     try:
@@ -491,7 +569,8 @@ def process_call(src, idx, global_scope):
     -(+('1', -('1', '2')), '5')
     >>> process_call("((+ 1 2))", 0, {})[0]
     Traceback (most recent call last):
-    ParsingError: Expected function name, got a call to a function.
+    ParsingError: Expected function name, got a call \
+to a function "+('1', '2')".
     """
     if src[idx] != "(":
         raise ParsingError("Call must begin with \"(\".")
@@ -579,7 +658,7 @@ def run_source(source):
     2
     >>> run_source("(let 'x (let 'y 1 (+ y 0)) (+ x y))")
     Traceback (most recent call last):
-    ParsingError: Reference to unknown variable "y".
+    ParsingError: Reference to unknown variable "y" in "+('x', 'y')".
     >>> run_source("(let 'x 1 (let 'y 2 (+ x y)))")
     3
     >>> # Declare multiple variables in one let
@@ -619,6 +698,7 @@ def run_source(source):
     35
     >>> #No return value from program should be fine
     >>> run_source("(defun 'x (+ 1))")
+    <class 'abc.UserCall_x'>
     >>> # Can have no arguments
     >>> run_source("(defun 'x (+ 4)) (sqrt (x))")
     2.0
@@ -687,9 +767,25 @@ def run_source(source):
     >>> run_source("(if (eq 1 1) (+ 1))")
     1
     >>> run_source("(defun 'f 'a '* (+ a *))")
+    <class 'abc.UserCall_f'>
     >>> run_source("(defun 'g '* 'a (+ a *))")
     Traceback (most recent call last):
     ParsingError: "'*" must be the last parameter if present.
+    >>> # Functions can be passed as arguments
+    >>> run_source(
+    ... "(defun 'f 'x (x 1))\\
+    ...  (defun 'g 'y (+ y y))\\
+    ...  (f g)")
+    2
+    >>> # "*" must be defined even if it would be empty
+    >>> run_source(
+    ... "(let 'f\\
+    ...    (defun ' 'x '*\\
+    ...      (print *)\\
+    ...    )\\
+    ...    (f 1)\\
+    ...  )")
+    ()
     """
     return run_source_inner(source)[0]
 
