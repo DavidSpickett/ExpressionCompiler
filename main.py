@@ -141,6 +141,15 @@ in "let('foo', 2, +('foo', 5))".
         return self.apply(scope, global_scope, *resolved_args)
 
 
+class NotCall(Call):
+    exact = True
+    num_args = 1
+    name = "not"
+
+    def apply(self, scope, global_scope, boolean):
+        return not boolean
+
+
 class EqualCall(Call):
     exact = False
     num_args = 2
@@ -510,6 +519,7 @@ Expected (let <name> <value> ... (body))
         LenCall,
         ImportCall,
         FlattenCall,
+        NotCall,
     ]
     if isinstance(fn_name, Call):
         # Functions cannot return callables
@@ -786,6 +796,10 @@ def run_source(source):
     ...    (f 1)\\
     ...  )")
     ()
+    >>> run_source("(not (eq 1 0))")
+    True
+    >>> run_source("(not (+ 1))")
+    0
     """
     return run_source_inner(source)[0]
 

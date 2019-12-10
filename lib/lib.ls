@@ -24,6 +24,14 @@
   (reverse (tail (reverse ls)))
 )
 
+# TODO: we need a first arg here so that
+# "eq" gets at least two for parsing. If it's just
+# ** then that's counted as one argument when building
+# the call object.
+(defun 'neq 'first '*
+  (not (eq first **))
+)
+
 (defun 'empty 'ls
   (if (eq (len ls) 0)
     (+ 1)
@@ -68,7 +76,7 @@
     (defun ' '_ls
       (body
         (if (eq (len _ls) 1)
-          (nth 0 _ls)
+          (+ _ls)
           (list
             (f (tail _ls))
             (+ (head _ls))
