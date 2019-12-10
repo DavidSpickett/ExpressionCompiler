@@ -384,11 +384,21 @@ class BaseUserCall(Call):
         if self.arg_names and self.arg_names[-1] == "*":
             scope["*"] = ()
 
-        for idx in range(len(args)):
+        for idx in range(len(self.arg_names)):
             if self.arg_names[idx] == "*":
                 scope["*"] = args[idx:]
                 break
-            scope[self.arg_names[idx]] = args[idx]
+            try:
+                scope[self.arg_names[idx]] = args[idx]
+            except IndexError:
+                # Only variadic functions will get here
+                # Fix number of args is checked elsewhere
+                msg = "Wrong number of arguments for function \"{}\" \
+in \"{}\". Got {}, expected at least {}."
+                raise RuntimeError(msg.format(
+                                              self.name, self, len(args),
+                                              # -1 because * is optional
+                                              len(self.arg_names) - 1))
 
         # Run the body of the function with its parameters
         return self.body.execute(scope, global_scope)
@@ -444,7 +454,7 @@ class DefineFunctionCall(Call):
                 "arg_names": args,
                 # The code to be run (which is a Call by now)
                 "body": self.body,
-                "variadic": self.variadic
+                "variadic": self.variadic,
             }
         )
 
@@ -809,6 +819,20 @@ def run_source(source):
     True
     >>> run_source("(not (+ 1))")
     0
+    >>> run_source(
+    ... "(defun 'f 'x (print x))\\
+    ...  (f)")
+    Traceback (most recent call last):
+    ParsingError: Expected 1 argument for function "f", got 0.
+    >>> run_source(
+    ... "(defun 'f 'x 'y '* (+ 0))\\
+    ...  (f 1 2 3 4)\\
+    ...  (f 1 2 3)\\
+    ...  (f 1 2)\\
+    ...  (f 1)")
+    Traceback (most recent call last):
+    RuntimeError: Wrong number of arguments for function \
+"f" in "(f '1')". Got 1, expected at least 2.
     """
     return run_source_inner(source)[0]
 
