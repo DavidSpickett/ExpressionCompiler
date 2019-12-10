@@ -20,6 +20,46 @@ class ParsingError(Exception):
     pass
 
 
+def lookup_var(scope, global_scope, arg, current_call):
+    # Note: current_call is only here for the error msg
+
+    # If it hasn't already been resolved
+    if isinstance(arg, str):
+        # ' escape char, don't evaluate
+        if arg.startswith("'"):
+            return False, arg[1:]
+
+        try:
+            # Integer argument
+            return False, int(arg)
+        except ValueError:
+            # Must be the name of some symbol
+
+            # Whether to expand a list into flat arguments
+            # (print *ls) => (print ls[0] ls[1] ...)
+            expand = False
+
+            # Symbol preceeded with * is expanded
+            # "*" on its own is not
+            if arg.startswith("*") and len(arg) > 1:
+                arg = arg[1:]
+                expand = True
+
+            # Local scope first
+            if arg in scope:
+                arg = scope[arg]
+            elif arg in global_scope:
+                arg = global_scope[arg]
+            else:
+                msg = "Reference to unknown symbol \"{}\" in \"{}\"."
+                raise ParsingError(msg.format(arg, current_call))
+
+            return expand, arg
+
+    # Something that was already evaluated
+    return False, arg
+
+
 class Call(ABC):
     def __init__(self, *args):
         self.args = args
@@ -68,11 +108,11 @@ class Call(ABC):
         3
         >>> Call.execute(SquareRootCall("abc"), {}, {})
         Traceback (most recent call last):
-        ParsingError: Reference to unknown variable "abc" in "sqrt('abc')".
+        ParsingError: Reference to unknown symbol "abc" in "sqrt('abc')".
         >>> # Note that this var name is *not* escaped
         >>> Call.execute(LetCall("foo", 2, PlusCall("foo", 5)), {}, {})
         Traceback (most recent call last):
-        ParsingError: Reference to unknown variable "foo" \
+        ParsingError: Reference to unknown symbol "foo" \
 in "let('foo', 2, +('foo', 5))".
         >>> # Whereas this one is
         >>> Call.execute(LetCall("'bar", 16, SquareRootCall("bar")), {}, {})
@@ -88,35 +128,8 @@ in "let('foo', 2, +('foo', 5))".
         """
         # First resolve all symbols
         sym_args = []
-        # Whether to expand a list into flat arguments
-        # (print *ls) => (print ls[0] ls[1] ...)
-        expand = False
         for arg in self.args:
-            if isinstance(arg, str):
-                if arg.startswith("'"):
-                    # Don't evaluate this, just treat as string
-                    arg = arg[1:]
-                else:
-                    try:
-                        arg = int(arg)
-                    except ValueError:
-                        # Do list expansion
-                        if arg.startswith("*") and len(arg) > 1:
-                            arg = arg[1:]
-                            expand = True
-
-                        try:
-                            # Local scope first
-                            arg = scope[arg]
-                        except KeyError:
-                            try:
-                                arg = global_scope[arg]
-                            except KeyError:
-                                # TODO: urgh, rewrite this whole block
-                                msg = "Reference to unknown variable \
-\"{}\" in \"{}\"."
-                                raise ParsingError(msg.format(arg, self))
-
+            expand, arg = lookup_var(scope, global_scope, arg, self)
             if expand:
                 sym_args.extend(arg)
             else:
@@ -184,7 +197,7 @@ class IfCall(Call):
         elif len(args) == 3:
             args = (args[2],)
         else:
-            # Only "then" and condition is Falise
+            # Only "then" and condition is False
             args = []
 
         return args, scope
@@ -264,6 +277,9 @@ class LetCall(Call):
         return args, scope
 
     def validate_args(self):
+        # Special routine here since let requires
+        # matched pairs of name-value, followed by
+        # a single body.
         num_args = len(self.args)
         expect = "(let <name> <value> ... (body))"
         if num_args < 3:
@@ -453,26 +469,18 @@ class MaybeFunctionCall(Call):
         super().__init__(*args)
 
     def apply(self, scope, global_scope, *args):
-        # TODO: make a lookup function for this
-        try:
-            # Local vars come first
-            real_fn = scope[self.name]
-        except KeyError:
-            try:
-                real_fn = global_scope[self.name]
-            except KeyError:
-                raise ParsingError(
-                    "Call to unknown function \"{}\".".format(self.name))
+        _, real_fn = lookup_var(scope, global_scope,
+                                self.name, self)
+
+        if not issubclass(real_fn, Call):
+            msg = "\"{}\" is not a function, it is {}. (in \"{}\")"
+            raise RuntimeError(msg.format(self.name, real_fn, self))
 
         # Make an instance of it
         # Note that we use the pre-evaluation args here
         # though at the moment we only check the number of args
         # not the types. So we could use the paramater args instead.
-        try:
-            real_fn = real_fn(*self.args)
-        except TypeError:
-            raise RuntimeError("\"{}\" is not a function, it is {}.".format(
-                               self.name, real_fn))
+        real_fn = real_fn(*self.args)
 
         # Then the post evaluation args here
         return real_fn.apply(scope, global_scope, *args)
@@ -668,7 +676,7 @@ def run_source(source):
     2
     >>> run_source("(let 'x (let 'y 1 (+ y 0)) (+ x y))")
     Traceback (most recent call last):
-    ParsingError: Reference to unknown variable "y" in "+('x', 'y')".
+    ParsingError: Reference to unknown symbol "y" in "+('x', 'y')".
     >>> run_source("(let 'x 1 (let 'y 2 (+ x y)))")
     3
     >>> # Declare multiple variables in one let
@@ -728,7 +736,7 @@ def run_source(source):
     ...  (foo 1)\\
     ...  (bar 2)")
     Traceback (most recent call last):
-    ParsingError: Call to unknown function "bar".
+    ParsingError: Reference to unknown symbol "bar" in "bar('2')".
     >>> # We can define a function with a different body
     >>> run_source(
     ... "(if (+ 0)\\
