@@ -1,16 +1,34 @@
 ![](https://github.com/DavidSpickett/ExpressionCompiler/workflows/ExpressionCompiler/badge.svg)
 
-Simple parser/compiler for Lisp style expressions. For example:
+Parser/runner for a Lisp like language.
 ```
-(+ (- 4 2) 3) => 5
+(defun 'f 'n
+  (body
+    (print n)
+    (if (< n 5)
+      (f (+ n 1)) 
+    ) 
+  )
+)
+
+(f 0)
+```
+```
+0
+1
+2
+3
+4
+5
+None
 ```
 
-To run an example:
+To run a source file:
 ```
 python main.py examples/FizzBuzz.ls
 ```
 
-There is a simple Flask application to run code from a web browser. To run:
+There is a simple Flask application to run code from a web browser.
 ```
 $ cd flask/
 $ export FLASK_APP=app.py
