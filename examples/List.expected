@@ -3,6 +3,7 @@ The expanded list: 1 2 3 4
 Head: 1
 Last: 4
 Tail: (2, 3, 4)
+Init: (1, 2, 3)
 Apply function:
 1
 2

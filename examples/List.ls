@@ -8,6 +8,7 @@
     (print "Head:" (head ls))
     (print "Last:" (last ls))
     (print "Tail:" (tail ls))
+    (print "Init:" (init ls))
 
     (print "Apply function:")
     (defun 't 'x (print x))

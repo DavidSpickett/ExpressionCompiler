@@ -20,6 +20,10 @@
   )
 )
 
+(defun 'init 'ls
+  (reverse (tail (reverse ls)))
+)
+
 (defun 'empty 'ls
   (if (eq (len ls) 0)
     (+ 1)
