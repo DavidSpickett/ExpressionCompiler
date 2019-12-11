@@ -59,15 +59,32 @@
   (let '__apply_inner
     (defun ' 'varname 'ls 'fn 'idx
       (if (< idx (len ls))
-        (let 'v (nth idx ls)
-          (body
-            (fn v)
-            (__apply_inner varname ls fn (+ idx 1))
-          )
+        (body
+          (fn (nth idx ls))
+          (__apply_inner varname ls fn (+ idx 1))
         )
       )
     )
     (__apply_inner varname ls fn 0)
+  )
+)
+
+(defun 'map 'varname 'ls 'fn
+  (let '__map_inner
+    (defun ' 'varname 'ls 'fn 'idx
+      (if (neq idx (- (len ls) 1))
+        (let 'v (nth idx ls)
+          (list
+            (fn v)
+            (__map_inner varname ls fn (+ idx 1))
+          )
+        )
+        (fn (nth idx ls))
+      )
+    )
+    (flatten
+      (__map_inner varname ls fn 0)
+    )
   )
 )
 

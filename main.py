@@ -271,11 +271,19 @@ class LetCall(Call):
         # Should be an error, y is only in the inner scope
         scope = copy(scope)
 
+        # Must return a new set of args, with any values
+        # already evaluated.
+        new_args = []
         for k, v in pairwise(args[:-1]):
             if isinstance(v, Call):
                 v = v.execute(scope, global_scope)
             scope[k] = v
-        return args, scope
+            new_args.append(v)
+
+        # Put the body on the end
+        new_args.append(args[-1])
+
+        return new_args, scope
 
     def validate_args(self):
         # Special routine here since let requires
@@ -641,6 +649,9 @@ def normalise(source):
     >>> normalise("(+ 1 2) #thing\\n(+ 3 4)")
     '(+ 1 2)(+ 3 4)'
     """
+    # TODO: you can't use # in a string, or ( )
+    # this needs to be more context aware
+
     # <space><bracket><space> => <bracket>
     return re.sub(r"\s*([\(\)])\s*", r"\g<1>",
                   # <space> n times => <space>
@@ -833,6 +844,13 @@ def run_source(source):
     Traceback (most recent call last):
     RuntimeError: Wrong number of arguments for function \
 "f" in "(f '1')". Got 1, expected at least 2.
+    >>> # Check that let replaces it's arguments with evaluated
+    >>> # versions. Otherwise this will print foo twice.
+    >>> run_source(
+    ... "(defun 'f (print \\"foo\\"))\\
+    ...  (let 'a (f) (print \\"bar\\"))")
+    foo
+    bar
     """
     return run_source_inner(source)[0]
 

@@ -12,13 +12,27 @@
 
     (print "Apply function:")
     (defun 't 'x (print x))
-    (apply 'v ls t)
+    (print (apply 'v ls t))
 
     (print "Apply anonymous Function:")
-    (apply 'v ls
-      (defun ' 'v
-        (print v)
+    (let 'a
+      (apply 'v ls
+        (defun ' 'v
+          (print v)
+        )
       )
+      (print a)
+    )
+
+    (let 'm
+      (map 'v ls
+        (defun ' 'x
+          (body
+            (+ x 2)
+          )
+        )
+      )
+      (print "Map with + 2:" m)
     )
 
     (print "Reverse:" (reverse ls))
