@@ -182,6 +182,15 @@ class LessThanCall(Call):
         return lhs < rhs
 
 
+class NoneCall(Call):
+    exact = False
+    num_args = 0
+    name = "none"
+
+    def apply(self, scope, global_scope, *args):
+        return None
+
+
 class IfCall(Call):
     exact = False
     num_args = 2
@@ -547,6 +556,7 @@ Expected (let <name> <value> ... (body))
         ImportCall,
         FlattenCall,
         NotCall,
+        NoneCall,
     ]
     if isinstance(fn_name, Call):
         # Functions cannot return callables
