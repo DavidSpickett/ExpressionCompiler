@@ -1,3 +1,15 @@
+# TODO: This is nice but for the recursion limit
+# (defun 'len 'ls
+#   (if (empty ls)
+#     (+ 0)
+#     (+ 1
+#       (len
+#         (tail ls)
+#       )
+#     )
+#   )
+# )
+
 (defun 'last 'ls
   (nth -1 ls)
 )
