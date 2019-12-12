@@ -12,25 +12,27 @@
 
     (print "Apply function:")
     (defun 't 'x (print x))
-    (print (apply 'v ls t))
+    (print (apply t ls))
 
     (print "Apply anonymous Function:")
     (let 'a
-      (apply 'v ls
+      (apply
         (defun ' 'v
           (print v)
         )
+        ls
       )
       (print a)
     )
 
     (let 'm
-      (map 'v ls
+      (map
         (defun ' 'x
           (body
             (+ x 2)
           )
         )
+        ls
       )
       (print "Map with + 2:" m)
     )

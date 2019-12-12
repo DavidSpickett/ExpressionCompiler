@@ -54,28 +54,25 @@
   (+ *)
 )
 
-(defun 'map 'varname 'ls 'fn
+(defun 'map 'fn 'ls
   (let '__map_inner
-    (defun ' 'varname 'ls 'fn 'idx
-      (if (neq idx (- (len ls) 1))
-        (let 'v (nth idx ls)
-          (list
-            (fn v)
-            (__map_inner varname ls fn (+ idx 1))
-          )
+    (defun ' 'fn 'first '*
+      (if (empty *)
+        (fn first)
+        (list
+          (fn first)
+          (__map_inner fn **)
         )
-        (fn (nth idx ls))
       )
     )
     (flatten
-      (__map_inner varname ls fn 0)
+      (__map_inner fn *ls)
     )
   )
 )
 
-# Apply fn to all items of ls, return nothing
-(defun 'apply 'varname 'ls 'fn
-  (none (map varname ls fn))
+(defun 'apply 'fn 'ls
+  (none (map fn ls))
 )
 
 (defun 'reverse 'ls
