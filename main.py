@@ -61,6 +61,8 @@ def lookup_var(scope, global_scope, arg, current_call):
 
 
 class Call(ABC):
+    # Empty name means user code won't be calling this fn
+    name = ""
     # Whether args must be validated earlier
     validate_on_prepare = False
 
@@ -541,6 +543,9 @@ class MaybeFunctionCall(Call):
         return real_fn.apply(scope, global_scope, *args)
 
 
+builtin_calls = {v.name: v for v in Call.__subclasses__()}
+
+
 def make_call(fn_name, args, global_scope):
     """
     >>> # User function names aren't resolved here
@@ -550,42 +555,16 @@ def make_call(fn_name, args, global_scope):
     >>> make_call("+", [], {})
     (+)
     """
-    calls = [
-        PlusCall,
-        MinusCall,
-        SquareRootCall,
-        LetCall,
-        IfCall,
-        PrintCall,
-        EqualCall,
-        LessThanCall,
-        ModulusCall,
-        DefineFunctionCall,
-        NthCall,
-        LenCall,
-        ImportCall,
-        FlattenCall,
-        NotCall,
-        NoneCall,
-    ]
     if isinstance(fn_name, Call):
         # Functions cannot return callables
         raise ParsingError("Expected function name, got a call \
 to a function \"{}\".".format(fn_name))
 
-    # First check for a user function
     try:
         return global_scope[fn_name](*args)
     except KeyError:
-        # Look for a builtin function
-        for call_type in calls:
-            if call_type.name == fn_name:
-                break
-        else:
-            # Maybe this is a user func defined later
-            return MaybeFunctionCall(fn_name, *args)
-
-        return call_type(*args)
+        # Maybe this is a user func defined later
+        return MaybeFunctionCall(fn_name, *args)
 
 
 def get_symbol(src, idx):
@@ -683,8 +662,11 @@ def normalise(source):
 # Call this one when you want to get the resulting global scope
 def run_source_inner(source, global_scope=None):
     if global_scope is None:
-        # Where user functions are added to
-        global_scope = {}
+        """ No need for a deep copy here,
+            the Classes will stay the same.
+            Just don't want other fns hanging
+            around between runs. """
+        global_scope = copy(builtin_calls)
 
     source = normalise(source)
     idx = 0
@@ -879,6 +861,11 @@ def run_source(source):
     ...    (+ *ls)\\
     ...  )")
     3
+    >>> # Built in functions should also be in the global scope
+    >>> run_source(
+    ... "(defun 'f 'otherf '* (otherf **))\\
+    ...  (f + 1 2 3)")
+    6
     """
     return run_source_inner(source)[0]
 

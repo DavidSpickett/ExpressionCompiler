@@ -38,10 +38,7 @@
     )
 
     (print "Accumulate:"
-      # TODO: a builtin like "+" should be allowed for 'fn
-      (accumulate
-        (defun ' 'x 'y (+ x y))
-        ls 0)
+      (accumulate + ls 0)
     )
 
     (print "Reverse:" (reverse ls))
