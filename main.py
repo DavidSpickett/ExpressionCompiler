@@ -61,9 +61,11 @@ def lookup_var(scope, global_scope, arg, current_call):
 
 
 class Call(ABC):
+    # Whether args must be validated earlier
+    validate_on_prepare = False
+
     def __init__(self, *args):
         self.args = args
-        self.validate_args()
 
     def __repr__(self):
         # Print in lisp format (f arg1 arg2)
@@ -72,20 +74,25 @@ class Call(ABC):
           " ".join(map(repr, self.args))
         )
 
-    def validate_args(self):
-        insert = "" if self.exact else "at least "
-        pluralise = "s" if self.num_args != 1 else ""
-
-        if (self.exact and len(self.args) != self.num_args) or \
-           (not self.exact and len(self.args) < self.num_args):
-            err = "Expected {}{} argument{} for function \"{}\", got {}."
-            raise ParsingError(err.format(
-                                insert, self.num_args,
-                                pluralise, self.name, len(self.args)))
-
     def prepare(self, scope, global_scope, *args):
         # Called before any calls are evaled. E.g. for a let expression
         return args, scope
+
+    def validate_args(self, final_args):
+        """ This method is only called at runtime.
+            So that lists will have been expanded
+            already, and we can get the true
+            number of arguments.
+        """
+        insert = "" if self.exact else "at least "
+        pluralise = "s" if self.num_args != 1 else ""
+
+        if (self.exact and len(final_args) != self.num_args) or \
+           (not self.exact and len(final_args) < self.num_args):
+            err = "Expected {}{} argument{} for function \"{}\", got {}."
+            raise ParsingError(err.format(
+                                insert, self.num_args,
+                                pluralise, self.name, len(final_args)))
 
     def execute(self, scope, global_scope):
         """
@@ -126,6 +133,17 @@ in "(let 'foo' 2 (+ 'foo' 5))".
         >>> Call.execute(
         ...     DefineFunctionCall("'x", "'y", PlusCall("x", "y")), {}, {})
         <class 'abc.UserCall_x'>
+        >>> Call.execute(SquareRootCall(), {}, {})
+        Traceback (most recent call last):
+        ParsingError: Expected 1 argument for function "sqrt", got 0.
+        >>> Call.execute(LetCall(1, 2), {}, {})
+        Traceback (most recent call last):
+        ParsingError: Too few arguments for let "(let 1 2)". \
+Expected (let <name> <value> ... (body))
+        >>> LetCall(1, 2, 3, 4).execute({}, {})
+        Traceback (most recent call last):
+        ParsingError: Wrong number arguments for let "(let 1 2 3 4)". \
+Expected (let <name> <value> ... (body))
         """
         # First resolve all symbols
         sym_args = []
@@ -138,6 +156,8 @@ in "(let 'foo' 2 (+ 'foo' 5))".
 
         # Then we prepare the scope, adding any new vars
         # Things like "if" may modify it's args
+        if self.validate_on_prepare:
+            self.validate_args(sym_args)
         sym_args, scope = self.prepare(scope, global_scope, *sym_args)
 
         # Then resolve the calls using the updated scope
@@ -152,6 +172,8 @@ in "(let 'foo' 2 (+ 'foo' 5))".
         Remember that we validated the number of args
         when we built the Call objects.
         """
+        if not self.validate_on_prepare:
+            self.validate_args(resolved_args)
         return self.apply(scope, global_scope, *resolved_args)
 
 
@@ -195,6 +217,7 @@ class IfCall(Call):
     exact = False
     num_args = 2
     name = "if"
+    validate_on_prepare = True
 
     def prepare(self, scope, global_scope, *args):
         condition = args[0]
@@ -272,6 +295,7 @@ class LetCall(Call):
     exact = True
     num_args = 3
     name = "let"
+    validate_on_prepare = True
 
     def prepare(self, scope, global_scope, *args):
         # This is called before we evaluate the body
@@ -294,15 +318,16 @@ class LetCall(Call):
 
         return new_args, scope
 
-    def validate_args(self):
+    def validate_args(self, final_args):
         # Special routine here since let requires
         # matched pairs of name-value, followed by
         # a single body.
-        num_args = len(self.args)
+        num_args = len(final_args)
         expect = "(let <name> <value> ... (body))"
         if num_args < 3:
             raise ParsingError(
-                "Too few arguments for let. Expected {}".format(expect))
+                "Too few arguments for let \"{}\". \
+Expected {}".format(self, expect))
         elif not num_args % 2:
             raise ParsingError(
                 "Wrong number arguments for let \"{}\". \
@@ -374,6 +399,7 @@ class ImportCall(Call):
     name = "import"
     exact = True
     num_args = 1
+    validate_on_prepare = True
 
     def prepare(self, scope, global_scope, filepath):
         with open(filepath, 'r') as f:
@@ -425,6 +451,7 @@ class DefineFunctionCall(Call):
     exact = False
     num_args = 2
     name = "defun"
+    validate_on_prepare = True
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -519,26 +546,9 @@ def make_call(fn_name, args, global_scope):
     >>> # User function names aren't resolved here
     >>> make_call("ooo", [], {})
     (ooo)
-    >>> make_call("sqrt", [], {})
-    Traceback (most recent call last):
-    ParsingError: Expected 1 argument for function "sqrt", got 0.
-    >>> make_call("sqrt", [2, 3], {})
-    Traceback (most recent call last):
-    ParsingError: Expected 1 argument for function "sqrt", got 2.
+    >>> # Number of args is checked at runtime not here
     >>> make_call("+", [], {})
-    Traceback (most recent call last):
-    ParsingError: Expected at least 1 argument for function "+", got 0.
-    >>> make_call("let", [1, 2], {})
-    Traceback (most recent call last):
-    ParsingError: Too few arguments for let. \
-Expected (let <name> <value> ... (body))
-    >>> make_call("let", [1, 2, 3, 4], {})
-    Traceback (most recent call last):
-    ParsingError: Wrong number arguments for let "(let 1 2 3 4)". \
-Expected (let <name> <value> ... (body))
-    >>> make_call("eq", [1], {})
-    Traceback (most recent call last):
-    ParsingError: Expected at least 2 arguments for function "eq", got 1.
+    (+)
     """
     calls = [
         PlusCall,
@@ -861,6 +871,14 @@ def run_source(source):
     ...  (let 'a (f) (print \\"bar\\"))")
     foo
     bar
+    >>> # Argument validation delayed until execution time
+    >>> # If we didn't, the * would count as one and be an error.
+    >>> run_source(
+    ... "(import \\"lib/lib.ls\\")\\
+    ...  (let 'ls (list 1 2)\\
+    ...    (+ *ls)\\
+    ...  )")
+    3
     """
     return run_source_inner(source)[0]
 

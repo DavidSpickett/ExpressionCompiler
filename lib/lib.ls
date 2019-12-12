@@ -36,11 +36,7 @@
   (reverse (tail (reverse ls)))
 )
 
-# TODO: we need a first arg here so that
-# "eq" gets at least two for parsing. If it's just
-# ** then that's counted as one argument when building
-# the call object.
-(defun 'neq 'first '*
+(defun 'neq '*
   (not (eq first **))
 )
 
