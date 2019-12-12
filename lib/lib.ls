@@ -87,6 +87,21 @@
   (none (map fn ls))
 )
 
+(defun 'accumulate 'fn 'ls 'initial
+  (let '__accumulate_inner
+    (defun ' 'fn 'total 'first '*
+      (if (empty *)
+        (fn total first)
+        (__accumulate_inner fn
+          (fn total first)
+          **
+        )
+      )
+    )
+    (__accumulate_inner fn initial *ls)
+  )
+)
+
 (defun 'reverse 'ls
   (let 'f
     (defun ' '_ls
