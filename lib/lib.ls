@@ -37,7 +37,7 @@
 )
 
 (defun 'neq '*
-  (not (eq first **))
+  (not (eq **))
 )
 
 (defun 'empty 'ls

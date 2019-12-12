@@ -4,6 +4,8 @@ import sys
 
 examples = os.listdir("examples")
 examples = [f for f in examples if not f.endswith(".expected")]
+# Ignore vim temp files
+examples = [f for f in examples if not f.startswith(".")]
 examples = [os.path.splitext(f)[0] for f in examples]
 exit_code = 0
 

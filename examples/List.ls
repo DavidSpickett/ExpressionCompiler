@@ -28,13 +28,21 @@
     (let 'm
       (map
         (defun ' 'x
-          (body
-            (+ x 2)
-          )
+          (+ x 2)
         )
         ls
       )
       (print "Map with + 2:" m)
+    )
+
+    (let 'm
+      (map
+        (defun ' 'x
+          (neq x 3)
+        )
+        ls
+      )
+      (print "Map with neq 3:" m)
     )
 
     (print "Accumulate:"
