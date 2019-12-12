@@ -3,6 +3,7 @@ import re
 import math
 import operator
 import argparse
+import inspect
 from abc import ABC
 from functools import reduce
 from copy import copy
@@ -526,10 +527,19 @@ class MaybeFunctionCall(Call):
         super().__init__(*args)
 
     def apply(self, scope, global_scope, *args):
-        _, real_fn = lookup_var(scope, global_scope,
-                                self.name, self)
+        if isinstance(self.name, Call):
+            # Calling some function that returns a function:
+            # ((+ (defun ' 'x (+x)) 2)
+            # then calling *that* function.
+            real_fn = self.name.execute(scope, global_scope)
+        else:
+            _, real_fn = lookup_var(scope, global_scope,
+                                    self.name, self)
 
-        if not issubclass(real_fn, Call):
+        # Check if it's a class first otherwise we get:
+        # TypeError: cannot create weak reference to '<bla>' object
+        # For anything that isn't a class type.
+        if not inspect.isclass(real_fn) or not issubclass(real_fn, Call):
             msg = "\"{}\" is not a function, it is {}. (in \"{}\")"
             raise RuntimeError(msg.format(self.name, real_fn, self))
 
@@ -555,11 +565,6 @@ def make_call(fn_name, args, global_scope):
     >>> make_call("+", [], {})
     (+)
     """
-    if isinstance(fn_name, Call):
-        # Functions cannot return callables
-        raise ParsingError("Expected function name, got a call \
-to a function \"{}\".".format(fn_name))
-
     try:
         return global_scope[fn_name](*args)
     except KeyError:
@@ -603,10 +608,10 @@ def process_call(src, idx, global_scope):
     (+ '1' '2' '3' '4' '5' '6')
     >>> process_call("(- (+ 1 (- 1 2)) 5)", 0, {})[0]
     (- (+ '1' (- '1' '2')) '5')
-    >>> process_call("((+ 1 2))", 0, {})[0]
-    Traceback (most recent call last):
-    ParsingError: Expected function name, got a call \
-to a function "(+ '1' '2')".
+    >>> # This will become a MaybeFunctionCall, with the +
+    >>> # call run later and then we check if it returns a fn
+    >>> process_call("((+ '1' '2'))", 0, {})[0]
+    ((+ "'1'" "'2'"))
     """
     if src[idx] != "(":
         raise ParsingError("Call must begin with \"(\".")
@@ -866,6 +871,15 @@ def run_source(source):
     ... "(defun 'f 'otherf '* (otherf **))\\
     ...  (f + 1 2 3)")
     6
+    >>> # You can call a function that is returned from another function
+    >>> run_source("((+ (defun ' 'x (print x))) 2)")
+    2
+    >>> run_source("((+ +) 2 2)")
+    4
+    >>> # Calling something that doesn't return a fn is an error
+    >>> run_source("((+ 2) 1)")
+    Traceback (most recent call last):
+    RuntimeError: "(+ '2')" is not a function, it is 2. (in "((+ '2') '1')")
     """
     return run_source_inner(source)[0]
 
