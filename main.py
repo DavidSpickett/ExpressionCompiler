@@ -7,14 +7,22 @@ import inspect
 from abc import ABC
 from functools import reduce
 from copy import copy
-from itertools import tee
 
 
-def pairwise(iterable):
-    "s -> (s0,s1), (s1,s2), (s2, s3), ..."
-    a, b = tee(iterable)
-    next(b, None)
-    return zip(a, b)
+def pairs(it):
+    """
+    >>> list(pairs((1,)))
+    Traceback (most recent call last):
+    IndexError: tuple index out of range
+    >>> list(pairs((1, 2)))
+    [(1, 2)]
+    >>> list(pairs((1, 2, 3)))
+    Traceback (most recent call last):
+    IndexError: tuple index out of range
+    >>> list(pairs((1, 2, 3, 4)))
+    [(1, 2), (3, 4)]
+    """
+    return ((it[i], it[i+1]) for i in range(0, len(it), 2))
 
 
 class ParsingError(Exception):
@@ -207,6 +215,8 @@ class LessThanCall(Call):
         return lhs < rhs
 
 
+# NoneCall and TrueCall being any number of args
+# means you can use them to ignore return values.
 class NoneCall(Call):
     exact = False
     num_args = 0
@@ -214,6 +224,55 @@ class NoneCall(Call):
 
     def apply(self, scope, global_scope, *args):
         return None
+
+
+class TrueCall(Call):
+    exact = False
+    num_args = 0
+    name = "true"
+
+    def apply(self, scope, global_scope, *args):
+        return True
+
+
+class CondCall(Call):
+    exact = False
+    num_args = 2
+    name = "cond"
+    validate_on_prepare = True
+
+    def prepare(self, scope, global_scope, *args):
+        for condition, action in pairs(args):
+            if isinstance(condition, Call):
+                condition = condition.execute(scope, global_scope)
+            # Return the first action with a True condition
+            if condition:
+                return (action,), scope
+
+        # Otherwise do nothing at all
+        return (), scope
+
+    def apply(self, scope, global_scope, *args):
+        try:
+            return args[-1]
+        except IndexError:
+            # No condition was true
+            pass
+
+    def validate_args(self, final_args):
+        # Special routine here since let requires
+        # matched pairs of name-value, followed by
+        # a single body.
+        num_args = len(final_args)
+        expect = "(cond <condition> <action> ...)"
+        if num_args < 2:
+            raise ParsingError(
+                "cond \"{}\" requires at least 2 arguments. \
+Expected {}".format(self, expect))
+        elif num_args % 2:
+            raise ParsingError(
+                "Wrong number arguments for cond \"{}\". \
+Expected {}".format(self, expect))
 
 
 class IfCall(Call):
@@ -310,7 +369,7 @@ class LetCall(Call):
         # Must return a new set of args, with any values
         # already evaluated.
         new_args = []
-        for k, v in pairwise(args[:-1]):
+        for k, v in pairs(args[:-1]):
             if isinstance(v, Call):
                 v = v.execute(scope, global_scope)
             scope[k] = v
@@ -880,6 +939,25 @@ def run_source(source):
     >>> run_source("((+ 2) 1)")
     Traceback (most recent call last):
     RuntimeError: "(+ '2')" is not a function, it is 2. (in "((+ '2') '1')")
+    >>> # At least 2 args
+    >>> run_source("(cond (+0))")
+    Traceback (most recent call last):
+    ParsingError: cond "(cond (+0))" requires at least 2 arguments. \
+Expected (cond <condition> <action> ...)
+    >>> # Must be matched pairs of arguments
+    >>> run_source("(cond (+ 0) (+ 0) (+ 1))")
+    Traceback (most recent call last):
+    ParsingError: Wrong number arguments for cond "(cond (+ '0') (+ '0') \
+(+ '1'))". Expected (cond <condition> <action> ...)
+    >>> run_source("(cond (+ 0) (+ 5) (+ 1) (+ 6))")
+    6
+    >>> # Nothing matches, nothing returned
+    >>> run_source("(cond (eq 1 2) (+ 1) (eq 2 3) (+ 2))")
+    >>> # First true condition wins
+    >>> run_source("(cond (eq 1 1) (+ 1) (eq 2 2) (+ 2))")
+    1
+    >>> run_source("(true (eq 1 0))")
+    True
     """
     return run_source_inner(source)[0]
 
