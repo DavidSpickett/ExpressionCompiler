@@ -6,7 +6,7 @@ import argparse
 import inspect
 from abc import ABC
 from functools import reduce
-from copy import copy
+from copy import copy, deepcopy
 
 
 def pairs(it):
@@ -65,6 +65,7 @@ class Call(ABC):
 
     def __init__(self, *args):
         self.args = args
+        self.prepared = False
 
     def __repr__(self):
         # Print in lisp format (f arg1 arg2)
@@ -93,37 +94,77 @@ class Call(ABC):
                                 insert, self.num_args,
                                 pluralise, self.name, len(final_args)))
 
-    def execute(self, scope, global_scope):
-        # First resolve all symbols
-        sym_args = []
-        for arg in self.args:
-            expand, arg = lookup_var(scope, global_scope, arg, self)
-            if expand:
-                sym_args.extend(arg)
-            else:
-                sym_args.append(arg)
 
-        # Then we prepare the scope, adding any new vars
-        # Things like "if" may modify it's args
-        if self.validate_on_prepare:
-            self.validate_args(sym_args)
-        sym_args, scope = self.prepare(scope, global_scope, *sym_args)
+def execute(call, scope, global_scope):
+    """
+    Python by default doesn't appreciate a lot of recursion.
+    Since the language I'm implementing is all about recursion,
+    that's a problem.
 
-        # Then resolve the calls using the updated scope
-        resolved_args = []
-        for arg in sym_args:
+    That's why this loop is written as one function, with an
+    explicit stack.
+    This means that the call depth does not increase when you
+    have something like:
+    (+ (+ (+ 1 2) 3) 4)
+
+    It will still increase if you nest anyting that
+    has to execute things in it's "prepare".
+    (a sort of "breadth first" execute)
+
+    Which means let, cond, if, user functions etc.
+    This new function does help some at least.
+    """
+    stack = [(None, None, None, None)]
+    arg_idx = 0
+
+    while True:
+        if not call.prepared:
+            # First resolve all symbols
+            sym_args = []
+            for arg in call.args:
+                expand, arg = lookup_var(scope, global_scope, arg, call)
+                if expand:
+                    sym_args.extend(arg)
+                else:
+                    sym_args.append(arg)
+
+            # Then we prepare the scope, adding any new vars
+            # Things like "if" may modify it's args
+            if call.validate_on_prepare:
+                call.validate_args(sym_args)
+            sym_args, scope = call.prepare(scope, global_scope, *sym_args)
+
+            # Easier than every prepare calling list
+            sym_args = list(sym_args)
+
+            call.prepared = True
+
+        for arg_idx in range(arg_idx, len(sym_args)):
+            arg = sym_args[arg_idx]
             if isinstance(arg, Call):
-                arg = arg.execute(scope, global_scope)
-            resolved_args.append(arg)
+                stack.append((sym_args, arg_idx, call, scope))
+                arg_idx = 0
+                call = arg
+                break
+        else:
+            # Have resolved all calls
+            if not call.validate_on_prepare:
+                call.validate_args(sym_args)
 
-        """
-        Now all arguments are constants
-        Remember that we validated the number of args
-        when we built the Call objects.
-        """
-        if not self.validate_on_prepare:
-            self.validate_args(resolved_args)
-        return self.apply(scope, global_scope, *resolved_args)
+            # Final run
+            result = call.apply(scope, global_scope, *sym_args)
+
+            # Go back to parent
+            sym_args, arg_idx, call, scope = stack.pop()
+
+            if not stack:
+                # If we just popped the initial dummy stack
+                # the program has finished.
+                return result
+            else:
+                # Otherwise replace the arg and move to the next one
+                sym_args[arg_idx] = result
+                arg_idx += 1
 
 
 class NotCall(Call):
@@ -182,7 +223,7 @@ class CondCall(Call):
     def prepare(self, scope, global_scope, *args):
         for condition, action in pairs(args):
             if isinstance(condition, Call):
-                condition = condition.execute(scope, global_scope)
+                condition = execute(condition, scope, global_scope)
             # Return the first action with a True condition
             if condition:
                 return (action,), scope
@@ -222,7 +263,7 @@ class IfCall(Call):
     def prepare(self, scope, global_scope, *args):
         condition = args[0]
         if isinstance(condition, Call):
-            condition = condition.execute(scope, global_scope)
+            condition = execute(condition, scope, global_scope)
 
         if condition:
             # Applies to either then or then and else
@@ -309,7 +350,7 @@ class LetCall(Call):
         new_args = []
         for k, v in pairs(args[:-1]):
             if isinstance(v, Call):
-                v = v.execute(scope, global_scope)
+                v = execute(v, scope, global_scope)
             scope[k] = v
             new_args.append(v)
 
@@ -431,7 +472,9 @@ in \"{}\". Got {}, expected at least {}."
                                               len(self.arg_names) - 1))
 
         # Run the body of the function with its parameters
-        return self.body.execute(scope, global_scope)
+        # Do this on a copy so that next time it is called
+        # we re-evaluate the arguments.
+        return execute(deepcopy(self.body), scope, global_scope)
 
 
 class DefineFunctionCall(Call):
@@ -515,7 +558,7 @@ class MaybeFunctionCall(Call):
             # Calling some function that returns a function:
             # ((+ (defun ' 'x (+x)) 2)
             # then calling *that* function.
-            real_fn = self.name.execute(scope, global_scope)
+            real_fn = execute(self.name, scope, global_scope)
         else:
             _, real_fn = lookup_var(scope, global_scope,
                                     self.name, self)
@@ -631,7 +674,7 @@ def run_source_inner(source, global_scope=None):
             # Execute as we go so that new functions are defined
             # Each new block will have a new scope
             # The global scope will be updated during blocks
-            result = body.execute({}, global_scope)
+            result = execute(body, {}, global_scope)
 
     # program's return value is the return of the last block
     return result, global_scope

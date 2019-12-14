@@ -35,51 +35,51 @@ def test_normalise():
 
 def test_execute():
     """
-    >>> Call.execute(PlusCall(1, 2), {}, {})
+    >>> execute(PlusCall(1, 2), {}, {})
     3
-    >>> Call.execute(PlusCall(1, 2), {}, {})
+    >>> execute(PlusCall(1, 2), {}, {})
     3
-    >>> Call.execute(PlusCall(1, 2, 3, 4), {}, {})
+    >>> execute(PlusCall(1, 2, 3, 4), {}, {})
     10
-    >>> Call.execute(MinusCall(PlusCall(4, 3), 4), {}, {})
+    >>> execute(MinusCall(PlusCall(4, 3), 4), {}, {})
     3
-    >>> Call.execute(SquareRootCall(4), {}, {})
+    >>> execute(SquareRootCall(4), {}, {})
     2.0
-    >>> Call.execute(
+    >>> execute(
     ...     PlusCall(
     ...         SquareRootCall(16),
     ...         MinusCall(12, 13)
     ...     ), {}, {})
     3.0
-    >>> Call.execute(PlusCall("foo", "bar"), {"foo":1, "bar":2}, {})
+    >>> execute(PlusCall("foo", "bar"), {"foo":1, "bar":2}, {})
     3
-    >>> Call.execute(SquareRootCall("abc"), {}, {})
+    >>> execute(SquareRootCall("abc"), {}, {})
     Traceback (most recent call last):
     main.ParsingError: Reference to unknown symbol "abc" in "(sqrt 'abc')".
     >>> # Note that this var name is *not* escaped
-    >>> Call.execute(LetCall("foo", 2, PlusCall("foo", 5)), {}, {})
+    >>> execute(LetCall("foo", 2, PlusCall("foo", 5)), {}, {})
     Traceback (most recent call last):
     main.ParsingError: Reference to unknown symbol "foo" \
 in "(let 'foo' 2 (+ 'foo' 5))".
     >>> # Whereas this one is
-    >>> Call.execute(LetCall("'bar", 16, SquareRootCall("bar")), {}, {})
+    >>> execute(LetCall("'bar", 16, SquareRootCall("bar")), {}, {})
     4.0
-    >>> Call.execute(EqualCall(1, 2), {}, {})
+    >>> execute(EqualCall(1, 2), {}, {})
     False
-    >>> Call.execute(EqualCall(1, 1, 1, 1), {}, {})
+    >>> execute(EqualCall(1, 1, 1, 1), {}, {})
     True
     >>> # Show that the body is not evaluated
-    >>> Call.execute(
+    >>> execute(
     ...     DefineFunctionCall("'x", "'y", PlusCall("x", "y")), {}, {})
     <class 'abc.UserCall_x'>
-    >>> Call.execute(SquareRootCall(), {}, {})
+    >>> execute(SquareRootCall(), {}, {})
     Traceback (most recent call last):
     main.ParsingError: Expected 1 argument for function "sqrt", got 0.
-    >>> Call.execute(LetCall(1, 2), {}, {})
+    >>> execute(LetCall(1, 2), {}, {})
     Traceback (most recent call last):
     main.ParsingError: Too few arguments for let "(let 1 2)". \
 Expected (let <name> <value> ... (body))
-    >>> LetCall(1, 2, 3, 4).execute({}, {})
+    >>> execute(LetCall(1, 2, 3, 4), {}, {})
     Traceback (most recent call last):
     main.ParsingError: Wrong number arguments for let "(let 1 2 3 4)". \
 Expected (let <name> <value> ... (body))

@@ -11,8 +11,8 @@
       (eq (% n 5) 0) (print "Buzz")
       (true)         (print n)
     )
-    # >97 reaches Python's maximum recursion depth
-    (if (< n 97)
+    # 136 is the limit before Python's recursion limit kicks in
+    (if (< n 136)
       (fizzbuzz (+ n 1))
     )
   )
