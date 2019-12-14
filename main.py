@@ -61,11 +61,21 @@ class Call(ABC):
     # Empty name means user code won't be calling this fn
     name = ""
     # Whether args must be validated earlier
-    validate_on_prepare = False
+    validate_on_resolve = False
 
     def __init__(self, *args):
         self.args = args
+        self.resolved_symbols = False
         self.prepared = False
+
+    def can_prepare(self, args, arg_idx):
+        # Have we executed enough args to be able to prepare?
+        return True
+
+    def sort_args(self, args):
+        # Here we would re-order args to put
+        # those required for prepare first
+        return args
 
     def __repr__(self):
         # Print in lisp format (f arg1 arg2)
@@ -74,7 +84,7 @@ class Call(ABC):
           " ".join(map(repr, self.args))
         )
 
-    def prepare(self, scope, global_scope, *args):
+    def prepare(self, scope, global_scope, args):
         # Called before any calls are evaled. E.g. for a let expression
         return args, scope
 
@@ -96,6 +106,7 @@ class Call(ABC):
 
 
 def execute(call, scope, global_scope):
+    execute.count += 1
     """
     Python by default doesn't appreciate a lot of recursion.
     Since the language I'm implementing is all about recursion,
@@ -118,8 +129,7 @@ def execute(call, scope, global_scope):
     arg_idx = 0
 
     while True:
-        if not call.prepared:
-            # First resolve all symbols
+        if not call.resolved_symbols:
             sym_args = []
             for arg in call.args:
                 expand, arg = lookup_var(scope, global_scope, arg, call)
@@ -128,27 +138,42 @@ def execute(call, scope, global_scope):
                 else:
                     sym_args.append(arg)
 
-            # Then we prepare the scope, adding any new vars
-            # Things like "if" may modify it's args
-            if call.validate_on_prepare:
+            # Note that argument sorting is *after* resolve/expansion
+            sym_args = call.sort_args(sym_args)
+
+            # Now we know the *number* of args we can check that
+            if call.validate_on_resolve:
                 call.validate_args(sym_args)
-            sym_args, scope = call.prepare(scope, global_scope, *sym_args)
 
-            # Easier than every prepare calling list
-            sym_args = list(sym_args)
+            # This bool is a run-once guard for when we break below
+            call.resolved_symbols = True
 
-            call.prepared = True
+        num_args = len(sym_args)
+        while arg_idx < num_args:
+            # See if we have enough to prepare
+            # Note that can_prepare want's the idx of the *next*
+            # argument to be handled.
+            if call.can_prepare(sym_args, arg_idx) and not call.prepared:
+                sym_args, scope = call.prepare(scope, global_scope, sym_args)
+                # Prepare can remove args
+                num_args = len(sym_args)
+                call.prepared = True
 
-        for arg_idx in range(arg_idx, len(sym_args)):
+                # Allow the normal while condition to do its
+                # job, on a potentially smaller list of args.
+                continue
+
             arg = sym_args[arg_idx]
             if isinstance(arg, Call):
                 stack.append((sym_args, arg_idx, call, scope))
                 arg_idx = 0
                 call = arg
                 break
+
+            arg_idx += 1
         else:
             # Have resolved all calls
-            if not call.validate_on_prepare:
+            if not call.validate_on_resolve:
                 call.validate_args(sym_args)
 
             # Final run
@@ -164,7 +189,12 @@ def execute(call, scope, global_scope):
             else:
                 # Otherwise replace the arg and move to the next one
                 sym_args[arg_idx] = result
+                # Continue processing args
                 arg_idx += 1
+
+
+# For tests to check number of calls
+execute.count = 0
 
 
 class NotCall(Call):
@@ -218,25 +248,38 @@ class CondCall(Call):
     exact = False
     num_args = 2
     name = "cond"
-    validate_on_prepare = True
+    validate_on_resolve = True
 
-    def prepare(self, scope, global_scope, *args):
-        for condition, action in pairs(args):
-            if isinstance(condition, Call):
-                condition = execute(condition, scope, global_scope)
-            # Return the first action with a True condition
-            if condition:
-                return (action,), scope
+    def can_prepare(self, args, arg_idx):
+        # Executed first half
+        return arg_idx == (len(args)/2)
+
+    def sort_args(self, args):
+        # All conditions to the front
+        # c1, a1, c2, a2 => c1, c2, a1, a2
+        conditions = [args[i] for i in range(0, len(args), 2)]
+        actions = [args[i] for i in range(1, len(args), 2)]
+        conditions.extend(actions)
+        return conditions
+
+    def prepare(self, scope, global_scope, args):
+        mid = len(args)//2
+        for i in range(mid):
+            if args[i]:
+                action = args[mid + i]
+                # Remove all the actions tied to other conditions
+                args = args[:mid]
+                args.append(action)
+                return args, scope
 
         # Otherwise do nothing at all
-        return (), scope
+        return args[:mid], scope
 
     def apply(self, scope, global_scope, *args):
-        try:
+        if len(args) > (len(self.args)/2):
+            # The other arg must be the true condition
             return args[-1]
-        except IndexError:
-            # No condition was true
-            pass
+        # Otherwise return None, nothing was done
 
     def validate_args(self, final_args):
         # Special routine here since let requires
@@ -258,31 +301,28 @@ class IfCall(Call):
     exact = False
     num_args = 2
     name = "if"
-    validate_on_prepare = True
+    validate_on_resolve = True
 
-    def prepare(self, scope, global_scope, *args):
-        condition = args[0]
-        if isinstance(condition, Call):
-            condition = execute(condition, scope, global_scope)
+    def can_prepare(self, args, arg_idx):
+        return arg_idx == 1
 
-        if condition:
+    def prepare(self, scope, global_scope, args):
+        new_args = [args[0]]
+        if args[0]:
             # Applies to either then or then and else
-            args = (args[1],)
+            new_args.append(args[1])
         elif len(args) == 3:
-            args = (args[2],)
-        else:
-            # Only "then" and condition is False
-            args = []
+            new_args.append(args[2])
+        # Only "then" and condition is False, no body to run
 
-        return args, scope
+        return new_args, scope
 
     def apply(self, scope, global_scope, *args):
         # The body has already been evaluated by this point
-        try:
+        # The condition is still argument 0
+        if len(args) > 1:
             return args[-1]
-        except IndexError:
-            # Only "then" and condition was False so no body
-            pass
+        # Otherwise None because nothing was done
 
 
 class ModulusCall(Call):
@@ -336,28 +376,23 @@ class LetCall(Call):
     exact = True
     num_args = 3
     name = "let"
-    validate_on_prepare = True
+    validate_on_resolve = True
 
-    def prepare(self, scope, global_scope, *args):
+    def can_prepare(self, args, arg_idx):
+        # -1 for the body on the end
+        return arg_idx == len(args)-1
+
+    def prepare(self, scope, global_scope, args):
         # This is called before we evaluate the body
         # Inner scope, don't modify outer
         # E.g. (let 'x 1 (let 'y 2 (+ 1 y)) (+ x y))
         # Should be an error, y is only in the inner scope
         scope = copy(scope)
 
-        # Must return a new set of args, with any values
-        # already evaluated.
-        new_args = []
         for k, v in pairs(args[:-1]):
-            if isinstance(v, Call):
-                v = execute(v, scope, global_scope)
             scope[k] = v
-            new_args.append(v)
 
-        # Put the body on the end
-        new_args.append(args[-1])
-
-        return new_args, scope
+        return args, scope
 
     def validate_args(self, final_args):
         # Special routine here since let requires
@@ -375,7 +410,7 @@ Expected {}".format(self, expect))
 Expected {}".format(self, expect))
 
     def apply(self, scope, global_scope, *args):
-        # The body has already been evaluated by this point
+        # The body has been executed by this point
         return args[-1]
 
 
@@ -427,10 +462,10 @@ class ImportCall(Call):
     name = "import"
     exact = True
     num_args = 1
-    validate_on_prepare = True
+    validate_on_resolve = True
 
-    def prepare(self, scope, global_scope, filepath):
-        with open(filepath, 'r') as f:
+    def prepare(self, scope, global_scope, args):
+        with open(args[0], 'r') as f:
             _, global_scope = run_source_inner(
                 f.read(), global_scope=global_scope)
         return (), scope
@@ -481,7 +516,7 @@ class DefineFunctionCall(Call):
     exact = False
     num_args = 2
     name = "defun"
-    validate_on_prepare = True
+    validate_on_resolve = True
 
     def __init__(self, *args):
         super().__init__(*args)
@@ -495,7 +530,7 @@ class DefineFunctionCall(Call):
                     "\"'*\" must be the last parameter if present.")
             self.variadic = True
 
-    def prepare(self, scope, global_scope, *args):
+    def prepare(self, scope, global_scope, args):
         """
         We need to prevent the body of the function
         being evaluated until it's actually called.

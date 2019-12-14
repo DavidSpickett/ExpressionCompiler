@@ -1,6 +1,39 @@
 from main import *  # noqa: F403 F401
 
 
+def get_execute_count(src):
+    execute.count = 0  # noqa: F405
+    _ = run_source(src)  # noqa: F405
+    return execute.count  # noqa: F405
+
+
+def execute_once():
+    """
+    >>> # Multiple levels of calls is still one execute
+    >>> get_execute_count("(+ 1 (- 1 ( + 2)))")
+    1
+    >>> get_execute_count("(let 'f (+ 1) (- f))")
+    1
+    >>> # 1 for defun block, 1 for (f) and 1 for the fn body
+    >>> # TODO: blend function calls into execute as well
+    >>> get_execute_count("(defun 'f (+ 0))(f)")
+    3
+    >>> get_execute_count(
+    ... "(cond\\
+    ...    (+ 1 (+ 1)) (+ 2)\\
+    ...    (none) (true (none))\\
+    ...  )")
+    1
+    >>> get_execute_count(
+    ... "(if (+ (true))\\
+    ...    (none)\\
+    ...    (- (+ 1 2))\\
+    ...  )")
+    1
+    """
+    pass
+
+
 def test_pairs():
     """
     >>> list(pairs((1,)))
