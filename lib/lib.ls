@@ -66,15 +66,20 @@
   (let '__map_inner
     (defun ' 'fn 'first '*
       (if (empty *)
-        (fn first)
+        # List so that flatten always gets a list
+        (list
+          (fn first)
+        )
         (list
           (fn first)
           (__map_inner fn **)
         )
       )
     )
-    (flatten
-      (__map_inner fn *ls)
+    (cond
+      (empty ls) (list)
+      (true)
+        (flatten (__map_inner fn *ls))
     )
   )
 )

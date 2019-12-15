@@ -52,3 +52,21 @@
     (print "Reverse:" (reverse ls))
   )
 )
+
+(let 'ls (list 1)
+  (body
+    (print "On single item list:" ls)
+    (print "Map:" (map + ls))
+    (print "Apply:" (apply + ls))
+    (print "Accumulate" (accumulate + ls 0))
+  )
+)
+
+(let 'ls (list)
+  (body
+    (print "On empty list:" ls)
+    (print "Map:" (map + ls))
+    (print "Apply:" (apply + ls))
+    (print "Accumulate:" (accumulate + ls 1))
+  )
+)

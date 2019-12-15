@@ -20,4 +20,12 @@ Map with + 2: (3, 4, 5, 6)
 Map with neq 3: (True, True, False, True)
 Accumulate: 10
 Reverse: (4, 3, 2, 1)
+On single item list: (1,)
+Map: (1,)
+Apply: None
+Accumulate 1
+On empty list: ()
+Map: ()
+Apply: None
+Accumulate: 1
 None
