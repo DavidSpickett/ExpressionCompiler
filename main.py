@@ -149,26 +149,37 @@ def execute(call, scope, global_scope):
             call.resolved_symbols = True
 
         num_args = len(sym_args)
+
+        # This is a bit of a hack to cope with 0 arguments
+        # e.g. fn f with no args (f) after prepare will have
+        # the body as an "argument", which we want to execute.
+        # Hence the index of -1
+        if call.can_prepare(sym_args, -1) and not call.prepared:
+            sym_args, scope = call.prepare(scope, global_scope, sym_args)
+            # Prepare can remove args
+            num_args = len(sym_args)
+            call.prepared = True
+
         while arg_idx < num_args:
-            # See if we have enough to prepare
-            # Note that can_prepare want's the idx of the *next*
-            # argument to be handled.
-            if call.can_prepare(sym_args, arg_idx) and not call.prepared:
-                sym_args, scope = call.prepare(scope, global_scope, sym_args)
-                # Prepare can remove args
-                num_args = len(sym_args)
-                call.prepared = True
-
-                # Allow the normal while condition to do its
-                # job, on a potentially smaller list of args.
-                continue
-
             arg = sym_args[arg_idx]
             if isinstance(arg, Call):
                 stack.append((sym_args, arg_idx, call, scope))
                 arg_idx = 0
                 call = arg
                 break
+
+            # See if we have enough to prepare.
+            # Note that can_prepare wants the idx
+            # of the arg we just executed.
+            if call.can_prepare(sym_args, arg_idx) and not call.prepared:
+                sym_args, scope = call.prepare(scope, global_scope, sym_args)
+                # Prepare can add/remove args
+                num_args = len(sym_args)
+                call.prepared = True
+
+                # Allow the normal while condition to do its
+                # job, on a potentially smaller list of args.
+                continue
 
             arg_idx += 1
         else:
@@ -189,8 +200,11 @@ def execute(call, scope, global_scope):
             else:
                 # Otherwise replace the arg and move to the next one
                 sym_args[arg_idx] = result
-                # Continue processing args
-                arg_idx += 1
+
+                # I'm not going to inc arg_idx here, because we'd
+                # have to check whether we can prepare again.
+                # Just let the while check the same idx again, it'll
+                # see that it's not a call anyway.
 
 
 # For tests to check number of calls
@@ -252,7 +266,7 @@ class CondCall(Call):
 
     def can_prepare(self, args, arg_idx):
         # Executed first half
-        return arg_idx == (len(args)/2)
+        return arg_idx == ((len(args)/2)-1)
 
     def sort_args(self, args):
         # All conditions to the front
@@ -304,7 +318,7 @@ class IfCall(Call):
     validate_on_resolve = True
 
     def can_prepare(self, args, arg_idx):
-        return arg_idx == 1
+        return arg_idx == 0
 
     def prepare(self, scope, global_scope, args):
         new_args = [args[0]]
@@ -379,8 +393,8 @@ class LetCall(Call):
     validate_on_resolve = True
 
     def can_prepare(self, args, arg_idx):
-        # -1 for the body on the end
-        return arg_idx == len(args)-1
+        # -1 for the body, executed last value
+        return arg_idx == len(args)-2
 
     def prepare(self, scope, global_scope, args):
         # This is called before we evaluate the body
@@ -475,15 +489,16 @@ class ImportCall(Call):
 
 
 class BaseUserCall(Call):
-    def apply(self, scope, global_scope, *args):
-        scope = copy(scope)
+    def can_prepare(self, args, arg_idx):
+        # About to execute the body
+        return arg_idx >= (len(args)-1)
 
-        """
-         No function body here that's handled in the defun
-         Do the binding now because if we did it in the
-         prepare step then expressions won't be resolved.
-         Here: (f (+ 1 2)) has become (f 3) already
-        """
+    def validate_args(self, final_args):
+        # Ignore fn body added by prepare
+        super().validate_args(final_args[:-1])
+
+    def prepare(self, scope, global_scope, args):
+        scope = copy(scope)
 
         # Make star empty as default in case they only
         # call with positional args. It must still be defined.
@@ -492,24 +507,25 @@ class BaseUserCall(Call):
 
         for idx in range(len(self.arg_names)):
             if self.arg_names[idx] == "*":
-                scope["*"] = args[idx:]
+                # Tuple just to keep printing consistent
+                scope["*"] = tuple(args[idx:])
                 break
             try:
                 scope[self.arg_names[idx]] = args[idx]
             except IndexError:
-                # Only variadic functions will get here
-                # Fix number of args is checked elsewhere
-                msg = "Wrong number of arguments for function \"{}\" \
-in \"{}\". Got {}, expected at least {}."
-                raise RuntimeError(msg.format(
-                                              self.name, self, len(args),
-                                              # -1 because * is optional
-                                              len(self.arg_names) - 1))
+                # Dummy since body hasn't been added yet
+                args.append(None)
+                # We validated that MaybeFunctionCall had the right args.
+                # Now check that the actual call we got is correct.
+                self.validate_args(args)
 
-        # Run the body of the function with its parameters
-        # Do this on a copy so that next time it is called
-        # we re-evaluate the arguments.
-        return execute(deepcopy(self.body), scope, global_scope)
+        # Now we want the body to run
+        args.append(deepcopy(self.body))
+        return args, scope
+
+    def apply(self, scope, global_scope, *args):
+        # The result of the fn body
+        return args[-1]
 
 
 class DefineFunctionCall(Call):
@@ -541,8 +557,8 @@ class DefineFunctionCall(Call):
         it in the defun call until it actually gets
         executed.
         """
-        self.body = args[-1]
-        return args[:-1], scope
+        self.body = args.pop()
+        return args, scope
 
     def apply(self, scope, global_scope, *args):
         # Add a new Call type to global scope
@@ -559,11 +575,11 @@ class DefineFunctionCall(Call):
             {
                 "exact": not self.variadic,
                 "name": name,
-                "num_args": 0 if self.variadic else len(args),
+                # Don't count the *
+                "num_args": len(args)-1 if self.variadic else len(args),
                 "arg_names": args,
-                # The code to be run (which is a Call by now)
-                "body": self.body,
                 "variadic": self.variadic,
+                "body": self.body
             }
         )
 
@@ -581,38 +597,62 @@ class MaybeFunctionCall(Call):
         (f) and check that it exists when
         we come to run it.
     """
-    num_args = 0
+    num_args = 1
     exact = False
 
-    def __init__(self, name, *args):
-        self.name = name
+    def __init__(self, *args):
+        # Name is just for printing
+        self.name = args[0]
+        # Note the name of the fn is included as the first argument
         super().__init__(*args)
 
-    def apply(self, scope, global_scope, *args):
-        if isinstance(self.name, Call):
-            # Calling some function that returns a function:
-            # ((+ (defun ' 'x (+x)) 2)
-            # then calling *that* function.
-            real_fn = execute(self.name, scope, global_scope)
-        else:
-            _, real_fn = lookup_var(scope, global_scope,
-                                    self.name, self)
+    def __repr__(self):
+        # Custom repr because the name of the fn is arg[0]
+        name = self.args[0]
+        args = self.args[1:]
+        return "({}{}{})".format(
+          name, " " if args else "",
+          " ".join(map(repr, args))
+        )
+
+    def can_prepare(self, args, arg_idx):
+        # Executed the name part
+        # (name could be a fn call itself)
+        return arg_idx == (len(self.args)-1)
+
+    def prepare(self, scope, global_scope, args):
+        # The "name" could be the result of a function,
+        # that returns a new function. In that case we can
+        # just use the value directly.
+        real_fn = args[0]
 
         # Check if it's a class first otherwise we get:
         # TypeError: cannot create weak reference to '<bla>' object
         # For anything that isn't a class type.
         if not inspect.isclass(real_fn) or not issubclass(real_fn, Call):
-            msg = "\"{}\" is not a function, it is {}. (in \"{}\")"
-            raise RuntimeError(msg.format(self.name, real_fn, self))
+            _, real_fn = lookup_var(scope, global_scope,
+                                    real_fn, self)
 
-        # Make an instance of it
-        # Note that we use the pre-evaluation args here
-        # though at the moment we only check the number of args
-        # not the types. So we could use the paramater args instead.
-        real_fn = real_fn(*self.args)
+        # Don't need the name anymore
+        args = args[1:]
 
-        # Then the post evaluation args here
-        return real_fn.apply(scope, global_scope, *args)
+        # Check that a lookup did return a call type
+        if not inspect.isclass(real_fn) or not issubclass(real_fn, Call):
+            msg = "\"{}\" is not a function, it is {} ({}). (in \"{}\")"
+            raise RuntimeError(msg.format(
+                self.name, type(real_fn), real_fn, self))
+
+        # Make an instance of it, with the resolved arguments
+        real_fn = real_fn(*args)
+
+        # Add it as an "argument" to the current call
+        # So it gets executed after args are resolved
+        args.append(real_fn)
+        return args, scope
+
+    def apply(self, scope, global_scope, *args):
+        # The result of the real function
+        return args[-1]
 
 
 builtin_calls = {v.name: v for v in Call.__subclasses__()}

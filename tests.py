@@ -7,17 +7,13 @@ def get_execute_count(src):
     return execute.count  # noqa: F405
 
 
-def execute_once():
+def execute_count():
     """
     >>> # Multiple levels of calls is still one execute
     >>> get_execute_count("(+ 1 (- 1 ( + 2)))")
     1
     >>> get_execute_count("(let 'f (+ 1) (- f))")
     1
-    >>> # 1 for defun block, 1 for (f) and 1 for the fn body
-    >>> # TODO: blend function calls into execute as well
-    >>> get_execute_count("(defun 'f (+ 0))(f)")
-    3
     >>> get_execute_count(
     ... "(cond\\
     ...    (+ 1 (+ 1)) (+ 2)\\
@@ -28,6 +24,24 @@ def execute_once():
     ... "(if (+ (true))\\
     ...    (none)\\
     ...    (- (+ 1 2))\\
+    ...  )")
+    1
+    >>> # let + 2 fn calls
+    >>> get_execute_count("(let 'f (defun ' 'x (+ 1)) (f (f 0)))")
+    1
+    >>> # 1 for defun block, 1 for (f) call
+    >>> get_execute_count("(defun 'f (+ 0))(f)")
+    2
+    >>> # Just 1 despite the 6 calls to f
+    >>> get_execute_count(
+    ... "(let 'f\\
+    ...    (defun 'f 'x\\
+    ...      (if (eq x 0)\\
+    ...        (true)\\
+    ...        (f (- x 1))\\
+    ...      )\\
+    ...    )\\
+    ...    (f 5)\\
     ...  )")
     1
     """
@@ -233,7 +247,7 @@ def test_run_source():
     >>> run_source("(defun 'x 'y (+ y))(x 2 3)")
     Traceback (most recent call last):
     main.ParsingError: Expected 1 argument for function "x", got 2.
-    >>> run_source("(defun 'x 'y (+ y)) (x))")
+    >>> run_source("(defun 'x 'y (+ y)) (x)")
     Traceback (most recent call last):
     main.ParsingError: Expected 1 argument for function "x", got 0.
     >>> # This does not define "bar"
@@ -329,8 +343,7 @@ def test_run_source():
     ...  (f 1 2)\\
     ...  (f 1)")
     Traceback (most recent call last):
-    RuntimeError: Wrong number of arguments for function \
-"f" in "(f '1')". Got 1, expected at least 2.
+    main.ParsingError: Expected at least 2 arguments for function "f", got 1.
     >>> # Check that let replaces it's arguments with evaluated
     >>> # versions. Otherwise this will print foo twice.
     >>> run_source(
@@ -359,7 +372,8 @@ def test_run_source():
     >>> # Calling something that doesn't return a fn is an error
     >>> run_source("((+ 2) 1)")
     Traceback (most recent call last):
-    RuntimeError: "(+ '2')" is not a function, it is 2. (in "((+ '2') '1')")
+    RuntimeError: "(+ '2')" is not a function, it is \
+<class 'int'> (2). (in "((+ '2') '1')")
     >>> # At least 2 args
     >>> run_source("(cond (+0))")
     Traceback (most recent call last):
