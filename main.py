@@ -520,6 +520,8 @@ class BaseUserCall(Call):
                 self.validate_args(args)
 
         # Now we want the body to run
+        # deepcopy so that prepared flags aren't set
+        # next time we run this body
         args.append(deepcopy(self.body))
         return args, scope
 
