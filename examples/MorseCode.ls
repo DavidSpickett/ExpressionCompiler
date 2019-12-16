@@ -36,7 +36,7 @@
 
 (print
   (to_morse
-    (str_to_list "THE QUICK BROWN FOX")
+    (flatten "THE QUICK BROWN FOX")
   )
 )
 (print

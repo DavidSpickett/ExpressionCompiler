@@ -134,20 +134,3 @@
     (__inner v 0 ls)
   )
 )
-
-# string to list of chars
-(defun 'str_to_list 'str
-  (let '__inner
-    (defun ' 'idx 'str
-      (cond
-        (empty str) (list)
-        (eq idx (- (len str) 1)) (nth idx str)
-        (true) (list
-          (nth idx str)
-          (__inner (+ idx 1) str)
-        )
-      )
-    )
-    (flatten (__inner 0 str))
-  )
-)

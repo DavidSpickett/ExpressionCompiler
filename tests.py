@@ -393,6 +393,41 @@ Expected (cond <condition> <action> ...)
     1
     >>> run_source("(true (eq 1 0))")
     True
+    >>> # Name is a string literal, set correctly in scope
+    >>> run_source("(let (+ \\"foo\\") 1 (+ foo))")
+    1
+    >>> # Mutliple call levels doesn't cause literals to be looked up
+    >>> run_source("(print (+ (+ \\"Foo\\") (+ \\"Bar\\")))")
+    FooBar
+    >>> # flatten on a string literal gives you a list of chars
+    >>> run_source("(let 'ls (flatten \\"food\\") (print *ls))")
+    f o o d
+    >>> # and for a var
+    >>> run_source(
+    ... "(let 's \\"antelope\\"\\
+    ...    (let 'ls (flatten s)\\
+    ...      (print *ls)\\
+    ...    )\\
+    ...  )")
+    a n t e l o p e
+    >>> # flatten on a list that *includes* string literals
+    >>> # doesn't split modify the strings
+    >>> run_source(
+    ... "(import \\"lib/lib.ls\\")\\
+    ...  (let 'ls\\
+    ...    (flatten\\
+    ...      (list \\"abc\\"\\
+    ...        (list \\"def\\")\\
+    ...      )\\
+    ...    )\\
+    ...    (print *ls)\\
+    ...  )")
+    abc def
+    >>> # TODO: * expansion only works on variable names
+    >>> run_source("(print *(list 1 2))")
+    Traceback (most recent call last):
+    main.ParsingError: Reference to unknown symbol \
+"*" in "(print '*' (list '1' '2'))".
     """
     pass
 
