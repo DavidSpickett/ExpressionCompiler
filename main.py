@@ -17,41 +17,63 @@ class ParsingError(Exception):
     pass
 
 
+# Represents a user provided string.
+# Making it a subclass means I can prevent
+# them being looked up repeatedly.
+class StringVar(object):
+    def __init__(self, s):
+        self.value = s
+
+    def __repr__(self):
+        return "StringVar<\"{}\">".format(self.value)
+
+    def __len__(self):
+        return len(self.value)
+
+    def __iter__(self):
+        for c in self.value:
+            # Must be a new StringVar
+            yield StringVar(c)
+
+
 def lookup_var(scope, global_scope, arg, current_call):
     # Note: current_call is only here for the error msg
 
-    # If it hasn't already been resolved
-    if isinstance(arg, str):
-        # ' escape char, don't evaluate
-        if arg.startswith("'"):
-            return False, arg[1:]
+    # Don't lookup literal strings, or something that was
+    # already resolved.
+    if isinstance(arg, StringVar) or not isinstance(arg, str):
+        return False, arg
 
-        try:
-            # Integer argument
-            return False, int(arg)
-        except ValueError:
-            # Must be the name of some symbol
+    # ' escape char, don't evaluate
+    if arg.startswith("'"):
+        return False, arg[1:]
 
-            # Whether to expand a list into flat arguments
-            # (print *ls) => (print ls[0] ls[1] ...)
-            expand = False
+    try:
+        # Integer argument
+        return False, int(arg)
+    except ValueError:
+        # Must be the name of some symbol
 
-            # Symbol preceeded with * is expanded
-            # "*" on its own is not
-            if arg.startswith("*") and len(arg) > 1:
-                arg = arg[1:]
-                expand = True
+        # Whether to expand a list into flat arguments
+        # (print *ls) => (print ls[0] ls[1] ...)
+        expand = False
 
-            # Local scope first
-            if arg in scope:
-                arg = scope[arg]
-            elif arg in global_scope:
-                arg = global_scope[arg]
-            else:
-                msg = "Reference to unknown symbol \"{}\" in \"{}\"."
-                raise ParsingError(msg.format(arg, current_call))
+        # Symbol preceeded with * is expanded
+        # "*" on its own is not
+        if arg.startswith("*") and len(arg) > 1:
+            arg = arg[1:]
+            expand = True
 
-            return expand, arg
+        # Local scope first
+        if arg in scope:
+            arg = scope[arg]
+        elif arg in global_scope:
+            arg = global_scope[arg]
+        else:
+            msg = "Reference to unknown symbol \"{}\" in \"{}\"."
+            raise ParsingError(msg.format(arg, current_call))
+
+        return expand, arg
 
     # Something that was already evaluated
     return False, arg
@@ -383,7 +405,9 @@ class PrintCall(Call):
     name = "print"
 
     def apply(self, scope, global_scope, *args):
-        print(*args)
+        print(*map(
+            lambda v: v.value if isinstance(v, StringVar) else v,
+            args))
 
 
 class LetCall(Call):
@@ -404,6 +428,8 @@ class LetCall(Call):
         scope = copy(scope)
 
         for k, v in pairs(args[:-1]):
+            if isinstance(v, StringVar):
+                v = v.value
             scope[k] = v
 
         return args, scope
@@ -479,7 +505,7 @@ class ImportCall(Call):
     validate_on_resolve = True
 
     def prepare(self, scope, global_scope, args):
-        with open(args[0], 'r') as f:
+        with open(args[0].value, 'r') as f:
             _, global_scope = run_source_inner(
                 f.read(), global_scope=global_scope)
         return (), scope
@@ -569,6 +595,8 @@ class DefineFunctionCall(Call):
 
         # Note the name and args have the ' removed by now
         name = args[0]
+        if isinstance(name, StringVar):
+            name = name.value
         args = args[1:]
 
         global_scope[name] = type(
@@ -634,6 +662,8 @@ class MaybeFunctionCall(Call):
         if not inspect.isclass(real_fn) or not issubclass(real_fn, Call):
             _, real_fn = lookup_var(scope, global_scope,
                                     real_fn, self)
+            if isinstance(real_fn, StringVar):
+                real_fn = StringVar.value
 
         # Don't need the name anymore
         args = args[1:]
@@ -684,7 +714,7 @@ def get_symbol(src, idx):
 
     if is_string:
         idx += 1
-        symbol = "'" + symbol
+        symbol = StringVar(symbol)
 
     return symbol, idx
 
