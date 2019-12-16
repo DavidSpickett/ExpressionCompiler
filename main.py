@@ -30,10 +30,19 @@ class StringVar(object):
     def __len__(self):
         return len(self.value)
 
-    def __iter__(self):
-        for c in self.value:
-            # Must be a new StringVar
-            yield StringVar(c)
+    def __eq__(self, other):
+        return self.value == other.value
+
+    def __hash__(self):
+        return hash(self.value)
+
+    def __getitem__(self, key):
+        if not isinstance(key, int):
+            raise TypeError("No slicing string vars!")
+        return StringVar(self.value[key])
+
+    def __add__(self, other):
+        return StringVar(self.value + other.value)
 
 
 def lookup_var(scope, global_scope, arg, current_call):
@@ -428,8 +437,9 @@ class LetCall(Call):
         scope = copy(scope)
 
         for k, v in pairs(args[:-1]):
-            if isinstance(v, StringVar):
-                v = v.value
+            if isinstance(k, StringVar):
+                k = k.value
+            # V can be a StringVar, that's fine
             scope[k] = v
 
         return args, scope
@@ -483,11 +493,14 @@ class FlattenCall(Call):
         def _flatten(_ls):
             try:
                 for l in _ls:
-                    try:
-                        iter(l)
-                        _flatten(l)
-                    except TypeError:
+                    if isinstance(l, StringVar):
                         flat.append(l)
+                    else:
+                        try:
+                            iter(l)
+                            _flatten(l)
+                        except TypeError:
+                            flat.append(l)
             except TypeError:
                 raise ParsingError(
                     "Flatten \"{}\" not called with a list.".format(self))
