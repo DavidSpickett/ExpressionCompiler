@@ -428,6 +428,9 @@ Expected (cond <condition> <action> ...)
     Traceback (most recent call last):
     main.ParsingError: Reference to unknown symbol \
 "*" in "(print '*' (list '1' '2'))".
+    >>> # function name without brackets can be very confusing
+    >>> run_source("(eq none (none))")
+    False
     """
     pass
 

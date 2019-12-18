@@ -40,6 +40,12 @@
   (not (eq **))
 )
 
+#TODO: do I even need a true call?
+# eq 1 1
+(defun 'false '*
+  (not (true))
+)
+
 (defun 'empty 'ls
   (if (eq (len ls) 0)
     (+ 1)
@@ -122,15 +128,36 @@
 
 # find v in ls, return its index
 (defun 'find 'v 'ls
-  (let '__inner
-    (defun ' 'v 'idx 'ls
-      (if (eq v (nth idx ls))
-        (+ idx)
-        (if (neq idx (- (len ls) 1))
-          (__inner v (+ idx 1) ls)
+  (if (empty ls)
+    (none)
+    (let '__inner
+      (defun ' 'v 'idx 'ls
+        (if (eq v (nth idx ls))
+          (+ idx)
+          (if (neq idx (- (len ls) 1))
+            (__inner v (+ idx 1) ls)
+          )
         )
       )
+      (__inner v 0 ls)
     )
-    (__inner v 0 ls)
+  )
+)
+
+# TODO: dedupe?
+(defun 'findif 'fn 'ls
+  (if (empty ls)
+    (none)
+    (let '__inner
+      (defun ' 'idx 'ls
+        (if (fn (nth idx ls))
+          (+ idx)
+          (if (neq idx (- (len ls) 1))
+            (__inner (+ idx 1) ls)
+          )
+        )
+      )
+      (__inner 0 ls)
+    )
   )
 )
