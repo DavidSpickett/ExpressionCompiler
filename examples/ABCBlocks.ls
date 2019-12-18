@@ -1,5 +1,8 @@
 (import "lib/lib.ls")
 
+# Possible improvement, this will just take the first thing
+# that matches. Regardless of the other letter on the block.
+# There might be soloutions where that other letter is needed later.
 (defun 'get_letter 'l 'blocks 'used
   (let 'got
     (findif
@@ -8,12 +11,12 @@
         # check for none not false, since 0 is falsey
         # but also a valid index
         (body
-          (print "Find result:" (find l block))
           (if (neq (find l block) (none))
             (body
-              (print "found" l "in" block)
               # If the block has not been used
-              (if (eq (find block used) (none))
+              # TODO: I'm using a "secret" var idx from findif here
+              # need some other way to know the idx
+              (if (eq (find idx used) (none))
                 (true)
               )
             )
@@ -26,12 +29,9 @@
       (list (none) used)
       # Add found block to used list
       (body
-        (print "found" l "at index" got)
         (list 
           (true) 
-          (+ used 
-            (list (nth got blocks))
-          )
+          (+ used (list got))
         )
       )
     )
@@ -46,7 +46,6 @@
         (let 'got
           (get_letter (nth idx str) blocks used)
           (body
-            (print (nth idx str) "got" got)
             # If we found something
             (if (nth 0 got)
               (if (neq idx (- (len str) 1))
@@ -65,6 +64,11 @@
     )
   )
 )
+
+
+#TODO: if flatten was smarter we could do some kind of
+# zip function to create (list (list 0 (list "B" "O") ...
+# but map would just flatten that to (list 0 "B" "O"
 
 (defun 'check_word 'word
   (let
@@ -85,9 +89,4 @@
 (check_word "TREAT")
 (check_word "COMMON")
 (check_word "SQUAD")
-# TODO: this fails because when it finds F/S for the S
-# it adds (list "F" "S") to the used, which means *both*
-# F/S blocks now can't be used. I should store indexes instead
-# problem with that is that I don't have access to the index
-# during a findif predicate call
 (check_word "CONFUSE")
