@@ -126,25 +126,6 @@
   )
 )
 
-# find v in ls, return its index
-(defun 'find 'v 'ls
-  (if (empty ls)
-    (none)
-    (body
-      (defun '__find_inner 'v 'idx 'ls
-        (if (eq v (nth idx ls))
-          (+ idx)
-          (if (neq idx (- (len ls) 1))
-            (__find_inner v (+ idx 1) ls)
-          )
-        )
-      )
-      (__find_inner v 0 ls)
-    )
-  )
-)
-
-# TODO: dedupe?
 (defun 'findif 'predicate 'ls
   (if (empty ls)
     (none)
@@ -161,6 +142,19 @@
         )
       )
       (__findif_inner 0 ls predicate)
+    )
+  )
+)
+
+# find v in ls, return its index
+(defun 'find 'v 'ls
+  (body
+    (defun '__find_get_v v)
+    (findif
+      (defun ' 'idx 'val
+        (eq val (__find_get_v))
+      )
+      ls
     )
   )
 )

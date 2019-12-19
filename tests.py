@@ -432,6 +432,12 @@ Expected (cond <condition> <action> ...)
     >>> # function name without brackets can be very confusing
     >>> run_source("(eq none (none))")
     False
+    >>> # You can use a var direcltly as a fn body
+    >>> # to make a sort of global variable
+    >>> run_source(
+    ... "(let 'foo 99 (defun 'get_foo foo))\\
+    ...  (get_foo)")
+    99
     """
     pass
 
