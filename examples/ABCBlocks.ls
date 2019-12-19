@@ -1,3 +1,5 @@
+# https://www.rosettacode.org/wiki/ABC_Problem
+
 (import "lib/lib.ls")
 
 # Possible improvement: this will just take the first thing
