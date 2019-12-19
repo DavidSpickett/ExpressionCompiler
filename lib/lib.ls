@@ -69,8 +69,8 @@
 )
 
 (defun 'map 'fn 'ls
-  (let '__map_inner
-    (defun ' 'fn 'first '*
+  (body
+    (defun '__map_inner 'fn 'first '*
       (if (empty *)
         # List so that flatten always gets a list
         (list
@@ -95,8 +95,8 @@
 )
 
 (defun 'accumulate 'fn 'ls 'initial
-  (let '__accumulate_inner
-    (defun ' 'fn 'total 'first '*
+  (body
+    (defun '__accumulate_inner 'fn 'total 'first '*
       (if (empty *)
         (fn total first)
         (__accumulate_inner fn
@@ -110,19 +110,19 @@
 )
 
 (defun 'reverse 'ls
-  (let 'f
-    (defun ' '_ls
+  (body
+    (defun '__reverse_inner '_ls
       (body
         (if (eq (len _ls) 1)
           (+ _ls)
           (list
-            (f (tail _ls))
+            (__reverse_inner (tail _ls))
             (+ (head _ls))
           )
         )
       )
     )
-    (flatten (f ls))
+    (flatten (__reverse_inner ls))
   )
 )
 
@@ -130,34 +130,37 @@
 (defun 'find 'v 'ls
   (if (empty ls)
     (none)
-    (let '__inner
-      (defun ' 'v 'idx 'ls
+    (body
+      (defun '__find_inner 'v 'idx 'ls
         (if (eq v (nth idx ls))
           (+ idx)
           (if (neq idx (- (len ls) 1))
-            (__inner v (+ idx 1) ls)
+            (__find_inner v (+ idx 1) ls)
           )
         )
       )
-      (__inner v 0 ls)
+      (__find_inner v 0 ls)
     )
   )
 )
 
 # TODO: dedupe?
-(defun 'findif 'fn 'ls
+(defun 'findif 'predicate 'ls
   (if (empty ls)
     (none)
-    (let '__inner
-      (defun ' 'idx 'ls
-        (if (fn (nth idx ls))
+    (body
+      (defun '__findif_inner 'idx 'ls 'pred
+        # Predicate also gets the index.
+        # A bit weird but it makes one of the
+        # examples easier.
+        (if (pred idx (nth idx ls))
           (+ idx)
           (if (neq idx (- (len ls) 1))
-            (__inner (+ idx 1) ls)
+            (__findif_inner (+ idx 1) ls pred)
           )
         )
       )
-      (__inner 0 ls)
+      (__findif_inner 0 ls predicate)
     )
   )
 )

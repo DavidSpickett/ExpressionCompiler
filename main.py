@@ -537,7 +537,7 @@ class BaseUserCall(Call):
         super().validate_args(final_args[:-1])
 
     def prepare(self, scope, global_scope, args):
-        scope = copy(scope)
+        scope = dict()
 
         # Make star empty as default in case they only
         # call with positional args. It must still be defined.

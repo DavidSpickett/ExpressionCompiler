@@ -1,37 +1,42 @@
 (import "lib/lib.ls")
 
-# Possible improvement, this will just take the first thing
-# that matches. Regardless of the other letter on the block.
-# There might be soloutions where that other letter is needed later.
+# Possible improvement: this will just take the first thing
+# that matches regardless of the other letter on the block.
+# This might prevent further matches.
 (defun 'get_letter 'l 'blocks 'used
-  (let 'got
-    (findif
-      (defun ' 'block
-        # If the letter we want is on the block
-        # check for none not false, since 0 is falsey
-        # but also a valid index
-        (body
-          (if (neq (find l block) (none))
-            (body
-              # If the block has not been used
-              # TODO: I'm using a "secret" var idx from findif here
-              # need some other way to know the idx
-              (if (eq (find idx used) (none))
-                (true)
+  (body
+    # TODO: lambda var binding?
+    # For now this is a hack to make global vars.
+    # Since the "l" isn't in a fn it's resolved
+    # at function definition time.
+    (defun '__get_l l)
+    (defun '__get_used used)
+    (let 'got
+      (findif
+        (defun ' 'idx 'block
+          # If the letter we want is on the block
+          # check for none not false, since 0 is falsey
+          # but also a valid index
+          (body
+            (if (neq (find (__get_l) block) (none))
+              (body
+                (if (eq (find idx (__get_used)) (none))
+                  (true)
+                )
               )
             )
           )
         )
+        blocks
       )
-      blocks
-    )
-    (if (eq got (none))
-      (list (none) used)
-      # Add found block to used list
-      (body
-        (list 
-          (true) 
-          (+ used (list got))
+      (if (eq got (none))
+        (list (none) used)
+        # Add found block to used list
+        (body
+          (list
+            (true)
+            (+ used (list got))
+          )
         )
       )
     )
@@ -41,8 +46,8 @@
 (defun 'can_make_string 'str 'blocks
   (if (empty str)
     (true)
-    (let '__inner 
-      (defun ' 'str 'idx 'blocks 'used
+    (body
+      (defun '__inner 'str 'idx 'blocks 'used
         (let 'got
           (get_letter (nth idx str) blocks used)
           (body

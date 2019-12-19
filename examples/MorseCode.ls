@@ -24,8 +24,11 @@
   (accumulate +
     (map
       # Wrapper to pass 2 args to encode above
-      (defun ' 'c
-        (encode c dir)
+      (if dir
+        # Have this if instead of making dir global somehow
+        # TODO: some kind of binding would help here
+        (defun ' 'c (encode c 1))
+        (defun ' 'c (encode c 0))
       )
       chars)
     ""

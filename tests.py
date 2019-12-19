@@ -268,7 +268,7 @@ def test_run_source():
     ...  )\\
     ...  (x)")
     3
-    >>> # Value of x at time of defun is irrelevant
+    >>> # Calling a fn starts a fresh scope, so x isn't visible
     >>> run_source(
     ... "(let 'x 99\\
     ...     (defun 'y 'a (+ a x))\\
@@ -276,7 +276,8 @@ def test_run_source():
     ...  (let 'x 1\\
     ...     (y 10)\\
     ...  )")
-    11
+    Traceback (most recent call last):
+    main.ParsingError: Reference to unknown symbol "x" in "(+ 'a' 'x')".
     >>> run_source("(% 5 3)")
     2
     >>> # fn returning a string can be used as a name
