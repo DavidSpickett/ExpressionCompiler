@@ -539,9 +539,12 @@ class BaseUserCall(Call):
     def prepare(self, scope, global_scope, args):
         scope = dict()
 
+        # Add lambda captured vars
+        scope.update(self.captures)
+
         # Make star empty as default in case they only
         # call with positional args. It must still be defined.
-        if self.arg_names and self.arg_names[-1] == "*":
+        if self.variadic:
             scope["*"] = ()
 
         for idx in range(len(self.arg_names)):
@@ -578,13 +581,18 @@ class DefineFunctionCall(Call):
     def __init__(self, *args):
         super().__init__(*args)
         self.body = None
-        self.variadic = False
 
+        # Variables captured from the local scope
+        # as the fn is defined. This will only be filled
+        # in for lambdas.
+        self.captures = dict()
+
+        self.variadic = False
         var = "'*"
         if var in self.args:
-            if self.args.index("'*") != len(self.args)-2:
-                raise ParsingError(
-                    "\"'*\" must be the last parameter if present.")
+            if self.args.index(var) != len(self.args)-2:
+                raise ParsingError("\
+\"{}\" must be the last parameter if present.".format(var))
             self.variadic = True
 
     def prepare(self, scope, global_scope, args):
@@ -622,12 +630,31 @@ class DefineFunctionCall(Call):
                 "num_args": len(args)-1 if self.variadic else len(args),
                 "arg_names": args,
                 "variadic": self.variadic,
-                "body": self.body
+                "body": self.body,
+                "captures": self.captures,
             }
         )
 
         # Return the function itself, so it can be used as an argument
         return global_scope[name]
+
+
+class LambdaFunctionCall(DefineFunctionCall):
+    name = "lambda"
+
+    def apply(self, scope, global_scope, *args):
+        capture_names = args[0]
+        self.captures = dict()
+        # Get the values of these variables now at definition time
+        for name in capture_names:
+            expand, self.captures[name] = lookup_var(
+                scope, global_scope, name, self)
+            assert not expand
+
+        # Lambdas are always anonymous
+        args = ('',) + args[1:]
+
+        return super().apply(scope, global_scope, *args)
 
 
 class MaybeFunctionCall(Call):
@@ -676,7 +703,7 @@ class MaybeFunctionCall(Call):
             _, real_fn = lookup_var(scope, global_scope,
                                     real_fn, self)
             if isinstance(real_fn, StringVar):
-                real_fn = StringVar.value
+                real_fn = real_fn.value
 
         # Don't need the name anymore
         args = args[1:]
@@ -700,7 +727,16 @@ class MaybeFunctionCall(Call):
         return args[-1]
 
 
-builtin_calls = {v.name: v for v in Call.__subclasses__()}
+def subclasses(cls):
+    classes = set()
+    for c in cls.__subclasses__():
+        classes.add(c)
+        classes.update(subclasses(c))
+
+    return classes
+
+
+builtin_calls = {v.name: v for v in subclasses(Call)}
 
 
 def make_call(fn_name, args, global_scope):

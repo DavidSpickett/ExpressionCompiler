@@ -438,6 +438,56 @@ Expected (cond <condition> <action> ...)
     ... "(let 'foo 99 (defun 'get_foo foo))\\
     ...  (get_foo)")
     99
+    >>> # Lambdas can capture vars at define time.
+    >>> # f is reset to 1 but the fn still returns
+    >>> # the initial f.
+    >>> run_source(
+    ... "(import \\"lib/lib.ls\\")\\
+    ...  (let 'f 9\\
+    ...    (let 'g (lambda (list 'f) (+ f))\\
+    ...      (let 'f 1\\
+    ...        (g)\\
+    ...      )\\
+    ...    )\\
+    ...  )")
+    9
+    >>> # Capture list is required but can be empty
+    >>> run_source(
+    ... "(import \\"lib/lib.ls\\")\\
+    ...  (let 'f (lambda (list) 'a 'b (+ a b))\\
+    ...    (f 1 2)\\
+    ...  )")
+    3
+    >>> run_source("(let 'f (lambda (+ 2)) (f))")
+    Traceback (most recent call last):
+    main.ParsingError: Expected at least 2 arguments \
+for function "lambda", got 1.
+    >>> # You can call a lambda directly just like a defun
+    >>> run_source(
+    ... "(import \\"lib/lib.ls\\")\\
+    ...  ((lambda (list) 'x (+ x 2)) 2)")
+    4
+    >>> # Capture names must be escaped like var names
+    >>> # otherwise they will be resolved before lookup of the name
+    >>> run_source(
+    ... "(import \\"lib/lib.ls\\")\\
+    ...  (let 'f \\"food\\"\\
+    ...    (let 'fn (lambda (list f) (+ f))\\
+    ...      (f)\\
+    ...    )\\
+    ...  )")
+    Traceback (most recent call last):
+    RuntimeError: "f" is not a function, it is <class 'str'> (food). (in "(f)")
+    >>> # And stringvars never get looked up so you can't do that either
+    >>> run_source(
+    ... "(import \\"lib/lib.ls\\")\\
+    ...  (let 'f \\"food\\"\\
+    ...    (let 'fn (lambda (list "f") (+ f))\\
+    ...      (f)\\
+    ...    )\\
+    ...  )")
+    Traceback (most recent call last):
+    RuntimeError: "f" is not a function, it is <class 'str'> (food). (in "(f)")
     """
     pass
 

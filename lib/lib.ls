@@ -149,10 +149,9 @@
 # find v in ls, return its index
 (defun 'find 'v 'ls
   (body
-    (defun '__find_get_v v)
     (findif
-      (defun ' 'idx 'val
-        (eq val (__find_get_v))
+      (lambda (list 'v) 'idx 'val
+        (eq val v)
       )
       ls
     )
