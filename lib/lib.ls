@@ -90,6 +90,30 @@
   )
 )
 
+(defun 'filter 'fn 'ls
+  (body
+    (defun '__filter_inner 'fn 'first '*
+      (list
+        (if (fn first)
+          (+ first)
+          # These empty lists prevent None showing up
+          # and get flattened out on return
+          (list)
+        )
+        (if (len *)
+          (__filter_inner fn **)
+          (list)
+        )
+      )
+    )
+    (cond
+      (empty ls) (list)
+      (true)
+        (flatten (__filter_inner fn *ls))
+    )
+  )
+)
+
 (defun 'apply 'fn 'ls
   (none (map fn ls))
 )

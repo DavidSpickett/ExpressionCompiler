@@ -49,6 +49,19 @@
       (accumulate + ls 0)
     )
 
+    (defun 'is_even 'n
+      (eq (% n 2) 0)
+    )
+    (print "Filter (evens):"
+      (filter is_even ls)
+    )
+    (print "Filter (odds):"
+      (filter
+        (lambda (list) 'n (not (is_even n)))
+        ls
+      )
+    )
+
     (print "Reverse:" (reverse ls))
   )
 )
