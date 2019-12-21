@@ -6,35 +6,23 @@
 # that matches regardless of the other letter on the block.
 # This might prevent further matches.
 (defun 'get_letter 'l 'blocks 'used
-  (body
-    (let 'got
-      (findif
-        (lambda (list 'l 'used) 'idx 'block
-          # If the letter we want is on the block
-          # check for none not false, since 0 is falsey
-          # but also a valid index
-          (body
-            (if (neq (find l block) (none))
-              (body
-                (if (eq (find idx used) (none))
-                  (true)
-                )
-              )
-            )
-          )
-        )
-        blocks
-      )
-      (if (eq got (none))
-        (list (none) used)
-        # Add found block to used list
-        (body
-          (list
+  (let 'got
+    (findif
+      (lambda (list 'l 'used) 'idx 'block
+        # If the letter we want is on the block
+        (if (neq (find l block) (none))
+          # And that block has not been used
+          (if (eq (find idx used) (none))
             (true)
-            (+ used (list got))
           )
         )
       )
+      blocks
+    )
+    (if (eq got (none))
+      (list (none) used)
+      # Add found block to used blocks
+      (list (true) (+ used (list got)))
     )
   )
 )
