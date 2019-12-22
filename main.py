@@ -289,6 +289,24 @@ class TrueCall(Call):
         return True
 
 
+class CharToIntCall(Call):
+    exact = True
+    num_args = 1
+    name = "chartoint"
+
+    def apply(self, scope, global_scope, c):
+        return ord(c.value)
+
+
+class IntToCharCall(Call):
+    exact = True
+    num_args = 1
+    name = "inttochar"
+
+    def apply(self, scope, global_scope, i):
+        return StringVar(chr(i))
+
+
 class CondCall(Call):
     exact = False
     num_args = 2

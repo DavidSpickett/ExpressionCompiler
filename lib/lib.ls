@@ -40,6 +40,10 @@
   (not (eq **))
 )
 
+(defun '>= 'lhs 'rhs
+  (not (< lhs rhs))
+)
+
 #TODO: do I even need a true call?
 # eq 1 1
 (defun 'false '*

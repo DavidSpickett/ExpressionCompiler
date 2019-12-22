@@ -488,6 +488,10 @@ for function "lambda", got 1.
     ...  )")
     Traceback (most recent call last):
     RuntimeError: "f" is not a function, it is <class 'str'> (food). (in "(f)")
+    >>> run_source("(eq (chartoint \\"A\\") 65)")
+    True
+    >>> run_source("(eq (inttochar 65) \\"A\\")")
+    True
     """
     pass
 
