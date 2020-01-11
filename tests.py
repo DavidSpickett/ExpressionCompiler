@@ -1,4 +1,5 @@
 from main import *  # noqa: F403 F401
+from calls import *  # noqa: F403
 
 
 def get_execute_count(src):
@@ -102,11 +103,11 @@ def test_execute():
     3
     >>> execute(SquareRootCall("abc"), {}, {})
     Traceback (most recent call last):
-    main.ParsingError: Reference to unknown symbol "abc" in "(sqrt 'abc')".
+    RuntimeError: Reference to unknown symbol "abc" in "(sqrt 'abc')".
     >>> # Note that this var name is *not* escaped
     >>> execute(LetCall("foo", 2, PlusCall("foo", 5)), {}, {})
     Traceback (most recent call last):
-    main.ParsingError: Reference to unknown symbol "foo" \
+    RuntimeError: Reference to unknown symbol "foo" \
 in "(let 'foo' 2 (+ 'foo' 5))".
     >>> # Whereas this one is
     >>> execute(LetCall("'bar", 16, SquareRootCall("bar")), {}, {})
@@ -121,14 +122,14 @@ in "(let 'foo' 2 (+ 'foo' 5))".
     <class 'abc.UserCall_x'>
     >>> execute(SquareRootCall(), {}, {})
     Traceback (most recent call last):
-    main.ParsingError: Expected 1 argument for function "sqrt", got 0.
+    RuntimeError: Expected 1 argument for function "sqrt", got 0.
     >>> execute(LetCall(1, 2), {}, {})
     Traceback (most recent call last):
-    main.ParsingError: Too few arguments for let "(let 1 2)". \
+    RuntimeError: Too few arguments for let "(let 1 2)". \
 Expected (let <name> <value> ... (body))
     >>> execute(LetCall(1, 2, 3, 4), {}, {})
     Traceback (most recent call last):
-    main.ParsingError: Wrong number arguments for let "(let 1 2 3 4)". \
+    RuntimeError: Wrong number arguments for let "(let 1 2 3 4)". \
 Expected (let <name> <value> ... (body))
     """
     pass
@@ -140,7 +141,7 @@ def test_flatten_call():
     ()
     >>> FlattenCall("foo").apply({}, {}, 1)
     Traceback (most recent call last):
-    main.ParsingError: Flatten "(flatten 'foo')" not called with a list.
+    RuntimeError: Flatten "(flatten 'foo')" not called with a list.
     >>> FlattenCall.apply(None, {}, {}, [1, 2, 3])
     (1, 2, 3)
     >>> FlattenCall.apply(None, {}, {}, [[1, 2], 3])
@@ -199,7 +200,7 @@ def test_run_source():
     2
     >>> run_source("(let 'x (let 'y 1 (+ y 0)) (+ x y))")
     Traceback (most recent call last):
-    main.ParsingError: Reference to unknown symbol "y" in "(+ 'x' 'y')".
+    RuntimeError: Reference to unknown symbol "y" in "(+ 'x' 'y')".
     >>> run_source("(let 'x 1 (let 'y 2 (+ x y)))")
     3
     >>> # Declare multiple variables in one let
@@ -246,10 +247,10 @@ def test_run_source():
     >>> # Usual argument validaton takes place
     >>> run_source("(defun 'x 'y (+ y))(x 2 3)")
     Traceback (most recent call last):
-    main.ParsingError: Expected 1 argument for function "x", got 2.
+    RuntimeError: Expected 1 argument for function "x", got 2.
     >>> run_source("(defun 'x 'y (+ y)) (x)")
     Traceback (most recent call last):
-    main.ParsingError: Expected 1 argument for function "x", got 0.
+    RuntimeError: Expected 1 argument for function "x", got 0.
     >>> # This does not define "bar"
     >>> run_source(
     ... "(if (+ 1)\\
@@ -259,7 +260,7 @@ def test_run_source():
     ...  (foo 1)\\
     ...  (bar 2)")
     Traceback (most recent call last):
-    main.ParsingError: Reference to unknown symbol "bar" in "(bar '2')".
+    RuntimeError: Reference to unknown symbol "bar" in "(bar '2')".
     >>> # We can define a function with a different body
     >>> run_source(
     ... "(if (+ 0)\\
@@ -277,7 +278,7 @@ def test_run_source():
     ...     (y 10)\\
     ...  )")
     Traceback (most recent call last):
-    main.ParsingError: Reference to unknown symbol "x" in "(+ 'a' 'x')".
+    RuntimeError: Reference to unknown symbol "x" in "(+ 'a' 'x')".
     >>> run_source("(% 5 3)")
     2
     >>> # fn returning a string can be used as a name
@@ -312,7 +313,7 @@ def test_run_source():
     <class 'abc.UserCall_f'>
     >>> run_source("(defun 'g '* 'a (+ a *))")
     Traceback (most recent call last):
-    main.ParsingError: "'*" must be the last parameter if present.
+    RuntimeError: "'*" must be the last parameter if present.
     >>> # Functions can be passed as arguments
     >>> run_source(
     ... "(defun 'f 'x (x 1))\\
@@ -336,7 +337,7 @@ def test_run_source():
     ... "(defun 'f 'x (print x))\\
     ...  (f)")
     Traceback (most recent call last):
-    main.ParsingError: Expected 1 argument for function "f", got 0.
+    RuntimeError: Expected 1 argument for function "f", got 0.
     >>> run_source(
     ... "(defun 'f 'x 'y '* (+ 0))\\
     ...  (f 1 2 3 4)\\
@@ -344,7 +345,7 @@ def test_run_source():
     ...  (f 1 2)\\
     ...  (f 1)")
     Traceback (most recent call last):
-    main.ParsingError: Expected at least 2 arguments for function "f", got 1.
+    RuntimeError: Expected at least 2 arguments for function "f", got 1.
     >>> # Check that let replaces it's arguments with evaluated
     >>> # versions. Otherwise this will print foo twice.
     >>> run_source(
@@ -378,12 +379,12 @@ def test_run_source():
     >>> # At least 2 args
     >>> run_source("(cond (+0))")
     Traceback (most recent call last):
-    main.ParsingError: cond "(cond (+0))" requires at least 2 arguments. \
+    RuntimeError: cond "(cond (+0))" requires at least 2 arguments. \
 Expected (cond <condition> <action> ...)
     >>> # Must be matched pairs of arguments
     >>> run_source("(cond (+ 0) (+ 0) (+ 1))")
     Traceback (most recent call last):
-    main.ParsingError: Wrong number arguments for cond "(cond (+ '0') (+ '0') \
+    RuntimeError: Wrong number arguments for cond "(cond (+ '0') (+ '0') \
 (+ '1'))". Expected (cond <condition> <action> ...)
     >>> run_source("(cond (+ 0) (+ 5) (+ 1) (+ 6))")
     6
@@ -427,7 +428,7 @@ Expected (cond <condition> <action> ...)
     >>> # TODO: * expansion only works on variable names
     >>> run_source("(print *(list 1 2))")
     Traceback (most recent call last):
-    main.ParsingError: Reference to unknown symbol \
+    RuntimeError: Reference to unknown symbol \
 "*" in "(print '*' (list '1' '2'))".
     >>> # function name without brackets can be very confusing
     >>> run_source("(eq none (none))")
@@ -460,7 +461,7 @@ Expected (cond <condition> <action> ...)
     3
     >>> run_source("(let 'f (lambda (+ 2)) (f))")
     Traceback (most recent call last):
-    main.ParsingError: Expected at least 2 arguments \
+    RuntimeError: Expected at least 2 arguments \
 for function "lambda", got 1.
     >>> # You can call a lambda directly just like a defun
     >>> run_source(
